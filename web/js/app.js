@@ -200,7 +200,7 @@
     const existing = Store.findByForm(value);
     if (existing) {
       const via = existing.word !== keyOf(value) ? ` ("${esc(keyOf(value))}" hâliyle)` : '';
-      hint.innerHTML = `"${esc(existing.word)}" zaten listede${via}; cümleyi eklersen o kayda bağlam olarak eklenir. <button type="button" class="link" data-edit="${existing.id}">Düzenle</button>`;
+      hint.innerHTML = `"${esc(existing.word)}" zaten listede${via}; cümleyi eklersen o kayda bağlam olarak eklenir. <button type="button" class="link" data-edit="${esc(existing.id)}">Düzenle</button>`;
       hint.hidden = false;
     } else {
       hint.hidden = true;
@@ -354,7 +354,7 @@
     const draft = Store.isDraft(w);
     const forms = [...new Set(w.seen.map((s) => s.form).filter((f) => f && f !== w.word))];
     return `
-      <article class="card${draft ? ' is-draft' : ''}" data-id="${w.id}">
+      <article class="card${draft ? ' is-draft' : ''}" data-id="${esc(w.id)}">
         <div class="card-head">
           <div class="card-word">${esc(w.word)}</div>
           <div class="card-badges">
@@ -550,7 +550,7 @@
         .map(
           (w) => `
           <label class="ai-pick-item">
-            <input type="checkbox" value="${w.id}"${aiSelected.has(w.id) ? ' checked' : ''}>
+            <input type="checkbox" value="${esc(w.id)}"${aiSelected.has(w.id) ? ' checked' : ''}>
             <span class="ai-pick-word">${esc(w.word)}</span>
             ${Store.isDraft(w) ? '<span class="badge badge-draft">taslak</span>' : ''}
             ${w.review.length ? '<span class="badge badge-warn">gözden geçir</span>' : ''}

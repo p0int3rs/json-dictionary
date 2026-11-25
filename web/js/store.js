@@ -92,12 +92,15 @@ const Store = (() => {
     'conjunction', 'pronoun', 'determiner', 'interjection', 'phrase',
   ];
   const UNSORTED = 'unsorted';
-  const POS_TR = {
+  // Prototipsiz sözlük: dosyadan gelen "__proto__", "constructor" gibi anahtarlar yerleşik özelliklere çarpmasın.
+  const dict = (o = {}) => Object.assign(Object.create(null), o);
+
+  const POS_TR = dict({
     noun: 'isim', verb: 'fiil', adjective: 'sıfat', adverb: 'zarf', preposition: 'edat',
     conjunction: 'bağlaç', pronoun: 'zamir', determiner: 'belirleyici', interjection: 'ünlem',
     phrase: 'kalıp', unsorted: 'belirsiz',
-  };
-  const POS_ALIAS = {
+  });
+  const POS_ALIAS = dict({
     n: 'noun', isim: 'noun', ad: 'noun',
     v: 'verb', fiil: 'verb', eylem: 'verb',
     adj: 'adjective', 'sıfat': 'adjective', sifat: 'adjective',
@@ -109,7 +112,7 @@ const Store = (() => {
     'ünlem': 'interjection', unlem: 'interjection',
     deyim: 'phrase', 'kalıp': 'phrase', kalip: 'phrase', idiom: 'phrase', phrasal: 'phrase', expression: 'phrase',
     unsorted: UNSORTED, belirsiz: UNSORTED, 'türü belirsiz': UNSORTED, '?': UNSORTED,
-  };
+  });
   for (const p of POS_LIST) POS_ALIAS[p] = p;
 
   // Tek bir tür adını kanonik İngilizce ada çevir; tanınmazsa null.
@@ -234,14 +237,14 @@ const Store = (() => {
 
   /* ---------- eski biçimden dönüştürme ---------- */
 
-  const LANGS = {
+  const LANGS = dict({
     latin: 'Latince', latince: 'Latince',
     yunanca: 'Yunanca', 'antik yunanca': 'Yunanca', 'eski yunanca': 'Yunanca', greek: 'Yunanca',
     'eski ingilizce': 'Eski İngilizce', 'old english': 'Eski İngilizce',
     'eski fransızca': 'Eski Fransızca', 'old french': 'Eski Fransızca',
     'fransızca': 'Fransızca', french: 'Fransızca',
     almanca: 'Almanca', german: 'Almanca', 'eski norsça': 'Eski Norsça', 'old norse': 'Eski Norsça',
-  };
+  });
   function langOf(...texts) {
     for (const t of texts) {
       for (const m of String(t ?? '').matchAll(/\(([^)]*)\)/g)) {
@@ -676,7 +679,7 @@ const Store = (() => {
   }
 
   function exportWords(words = state.words) {
-    const out = {};
+    const out = dict();
     for (const w of words) out[w.word] = entryOf(w);
     return pretty(out) + '\n';
   }
@@ -784,7 +787,7 @@ const Store = (() => {
   /* ---------- ilerleme yedeği ---------- */
 
   function exportProgress() {
-    const progress = {};
+    const progress = dict();
     for (const w of state.words) {
       progress[w.word] = Object.fromEntries(PROGRESS_FIELDS.map((k) => [k, w[k]]));
     }
