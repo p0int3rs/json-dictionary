@@ -5,8 +5,9 @@ Okurken karşına çıkan İngilizce kelimeleri kaydedip kendi listenle oyun oyn
 | Klasör | İçerik |
 |---|---|
 | `web/` | Uygulama. Ayrıntılar: [web/README.md](web/README.md) |
-| `data/` | Kelime dosyaları. `gelismis.json` güncel biçimde, `gelismis.eski-bicim.json` dönüştürme öncesi yedek. Yayınlanmaz. |
 | `.github/workflows/pages.yml` | `web/` klasörünü GitHub Pages'e yayınlar |
+
+Kelimeler tarayıcıda saklanır; kişisel kelime dosyaları bu repoya konmaz (`data/` klasörü `.gitignore`'da).
 
 ## Yerelde çalıştırma
 

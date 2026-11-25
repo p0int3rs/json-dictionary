@@ -1,6 +1,9 @@
 # Yerel ayarlar (Claude Code)
 .claude/
 
+# Kişisel kelime dosyaları: repoya girmez, yalnızca bu bilgisayarda durur
+data/
+
 # Geçici dosyalar
 web/_test*
 
