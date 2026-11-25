@@ -1,0 +1,3 @@
+# Windows ve Linux'ta aynı satır sonu (LF)
+* text=auto eol=lf
+*.png binary

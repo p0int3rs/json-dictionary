@@ -1,0 +1,10 @@
+# Yerel ayarlar (Claude Code)
+.claude/
+
+# Geçici dosyalar
+web/_test*
+
+# İşletim sistemi
+.DS_Store
+Thumbs.db
+desktop.ini
