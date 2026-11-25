@@ -76,27 +76,31 @@
   }
 
   // Anlamlar, türlerine göre gruplu. Ana anlam vurgulanır.
+  // Anlamlar sözlükteki gibi düz metin satırı: "karşılaşmak · rastlamak · çarpışmak".
+  // Kısa anlamlar bölünmez, satır yalnızca ayraçlardan sonra kırılır; böylece düzensiz kutucuk sıraları oluşmaz.
   function sensesHtml(senses, primary, { skipEmpty = false } = {}) {
     const p = normTr(primary);
+    const item = (m) => {
+      const cls = 'm' + (m.length <= 24 ? ' nb' : '');
+      return p && normTr(m) === p
+        ? `<span class="${cls} is-primary" title="Ana anlam: gördüğün cümledeki anlam">${esc(m)}</span>`
+        : `<span class="${cls}">${esc(m)}</span>`;
+    };
     return Object.entries(senses)
       .filter(([, list]) => list.length || !skipEmpty)
-      .map(
-        ([pos, list]) => `
+      .map(([pos, list]) => {
+        // Ana anlam her zaman başta
+        const ordered = p ? [...list.filter((m) => normTr(m) === p), ...list.filter((m) => normTr(m) !== p)] : list;
+        return `
         <div class="sense">
           <span class="pos pos-${esc(pos)}">${esc(posLabel(pos))}</span>
-          <span class="chips">${
-            list.length
-              ? list
-                  .map((m) =>
-                    p && normTr(m) === p
-                      ? `<span class="chip is-primary" title="Ana anlam: gördüğün cümledeki anlam">${esc(m)}</span>`
-                      : `<span class="chip">${esc(m)}</span>`
-                  )
-                  .join('')
+          <span class="meanings">${
+            ordered.length
+              ? ordered.map(item).join('<span class="sep"> · </span>')
               : '<span class="muted small">bu türde anlam yok</span>'
           }</span>
-        </div>`
-      )
+        </div>`;
+      })
       .join('');
   }
 

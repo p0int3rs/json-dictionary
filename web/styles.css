@@ -331,7 +331,12 @@ input[type="radio"] { width: auto; accent-color: var(--accent); }
 .draft-text { margin: 0; }
 
 .senses { display: grid; gap: 6px; }
-.sense { display: flex; gap: 8px; align-items: baseline; }
+.sense { display: flex; gap: 10px; align-items: baseline; }
+.meanings { flex: 1; min-width: 0; font-size: 14px; line-height: 1.6; }
+.meanings .nb { white-space: nowrap; }
+.meanings .sep { color: var(--muted); }
+.meanings .is-primary { color: var(--accent); font-weight: 650; }
+.meanings .is-primary::before { content: "★ "; font-size: 0.85em; }
 .pos {
   flex: none; min-width: 48px; text-align: center;
   font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
