@@ -5,7 +5,7 @@
  * Önce ağ: internet varsa her zaman en güncel dosyalar gelir (güncelleme sonrası eski sürüm takılı kalmaz);
  * yoksa son indirilen kopya kullanılır. Kelimeler zaten tarayıcıda (localStorage) durur.
  */
-const CACHE = 'jsondictionary-v1';
+const CACHE = 'jsondictionary-v2';
 const ASSETS = [
   './',
   './index.html',

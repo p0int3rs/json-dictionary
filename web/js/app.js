@@ -8,38 +8,80 @@
   const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const { normTr, keyOf, posLabel } = Store;
 
+  const DAY = 24 * 60 * 60 * 1000;
+  const startOfToday = () => new Date().setHours(0, 0, 0, 0);
+  // "Son n gün": bugün dahil n takvim günü
+  const sinceDays = (n) => startOfToday() - (n - 1) * DAY;
+
+  // localStorage okuma/yazma (gizli pencerede hata vermesin)
+  const pref = {
+    get(k, d = null) {
+      try {
+        const v = localStorage.getItem('jsondictionary.' + k);
+        return v === null ? d : v;
+      } catch {
+        return d;
+      }
+    },
+    set(k, v) {
+      try {
+        localStorage.setItem('jsondictionary.' + k, v);
+      } catch {}
+    },
+  };
+
   /* ================= Tema ================= */
 
-  const THEME_KEY = 'jsondictionary.theme';
   function applyTheme(t) {
     if (t) document.documentElement.dataset.theme = t;
     else delete document.documentElement.dataset.theme;
   }
-  try {
-    applyTheme(localStorage.getItem(THEME_KEY));
-  } catch {}
+  applyTheme(pref.get('theme'));
   $('#theme-btn').addEventListener('click', () => {
     const current =
       document.documentElement.dataset.theme ||
       (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
     const next = current === 'light' ? 'dark' : 'light';
     applyTheme(next);
-    try {
-      localStorage.setItem(THEME_KEY, next);
-    } catch {}
+    pref.set('theme', next);
   });
 
   /* ================= Bildirim ve onay penceresi ================= */
 
+  // Bildirim "popover" olarak açılır: açık pencerelerin de üstünde görünür.
+  const toastEl = $('#toast');
+  const canPopover = typeof toastEl.showPopover === 'function';
+  if (!canPopover) toastEl.hidden = true;
   let toastTimer = null;
-  function toast(msg, kind = 'info') {
-    const el = $('#toast');
-    el.textContent = msg;
-    el.className = 'toast' + (kind === 'error' ? ' error' : '');
-    el.hidden = false;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => (el.hidden = true), kind === 'error' ? 5000 : 3200);
+  let toastFn = null;
+
+  function hideToast() {
+    if (canPopover) {
+      if (toastEl.matches(':popover-open')) toastEl.hidePopover();
+    } else toastEl.hidden = true;
   }
+
+  // action: { label, fn } → bildirimde düğme (örn. "Geri al")
+  function toast(msg, kind = 'info', action = null) {
+    $('#toast-msg').textContent = msg;
+    toastEl.classList.toggle('error', kind === 'error');
+    const btn = $('#toast-action');
+    toastFn = action ? action.fn : null;
+    btn.hidden = !action;
+    if (action) btn.textContent = action.label;
+    if (canPopover) {
+      hideToast();
+      toastEl.showPopover(); // yeniden açmak en üste taşır
+    } else toastEl.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, action ? 6000 : kind === 'error' ? 5000 : 3200);
+  }
+  $('#toast-action').addEventListener('click', () => {
+    const fn = toastFn;
+    toastFn = null;
+    hideToast();
+    if (fn) fn();
+  });
 
   // buttons: [{ label, value, kind }]. Esc ile kapatılırsa null döner.
   function ask({ title, html, buttons }) {
@@ -65,6 +107,19 @@
 
   const isAbort = (err) => err && (err.name === 'AbortError' || err.name === 'NotAllowedError');
 
+  // Pencerelerdeki ✕ düğmeleri ve arka plana tıklayınca kapanma
+  for (const dlg of $$('dialog')) {
+    dlg.addEventListener('click', (e) => {
+      if (e.target.closest('[data-close]')) dlg.close();
+      else if (e.target === dlg) {
+        // Kenar boşluğuna (arka plan) tıklama
+        const r = dlg.getBoundingClientRect();
+        const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+        if (!inside && dlg.id !== 'edit-dlg') dlg.close();
+      }
+    });
+  }
+
   /* ================= Ortak gösterim parçaları ================= */
 
   function highlight(text, form) {
@@ -75,9 +130,8 @@
     return parts.map((p, i) => (i % 2 ? `<mark>${esc(p)}</mark>` : esc(p))).join('');
   }
 
-  // Anlamlar, türlerine göre gruplu. Ana anlam vurgulanır.
-  // Anlamlar sözlükteki gibi düz metin satırı: "karşılaşmak · rastlamak · çarpışmak".
-  // Kısa anlamlar bölünmez, satır yalnızca ayraçlardan sonra kırılır; böylece düzensiz kutucuk sıraları oluşmaz.
+  // Anlamlar sözlükteki gibi düz metin satırı: "★ karşılaşmak · rastlamak · çarpışmak".
+  // Kısa anlamlar bölünmez, satır yalnızca ayraçlardan sonra kırılır; ana anlam başta ve vurgulu.
   function sensesHtml(senses, primary, { skipEmpty = false } = {}) {
     const p = normTr(primary);
     const item = (m) => {
@@ -89,7 +143,6 @@
     return Object.entries(senses)
       .filter(([, list]) => list.length || !skipEmpty)
       .map(([pos, list]) => {
-        // Ana anlam her zaman başta
         const ordered = p ? [...list.filter((m) => normTr(m) === p), ...list.filter((m) => normTr(m) !== p)] : list;
         return `
         <div class="sense">
@@ -122,25 +175,34 @@
       .join('');
   }
 
-  function seenHtml(w, max = 2) {
-    const withSentence = w.seen.filter((s) => s.sentence);
-    const shown = withSentence.slice(0, max);
-    const sources = [...new Set(w.seen.filter((s) => s.source && !s.sentence).map((s) => s.source))];
-    return (
-      shown
-        .map(
-          (s) =>
-            `<p class="example">${highlight(s.sentence, s.form || w.word)}${
-              s.source ? `<span class="example-src"> — ${esc(s.source)}</span>` : ''
-            }</p>`
-        )
-        .join('') +
-      (withSentence.length > max ? `<div class="meta">+${withSentence.length - max} cümle daha</div>` : '') +
-      (sources.length ? `<div class="meta">Kaynak: ${esc(sources.join(', '))}</div>` : '')
-    );
+  function sentenceHtml(s, w, cls = 'example') {
+    return `<p class="${cls}">${highlight(s.sentence, s.form || w.word)}${
+      s.source ? `<span class="example-src"> — ${esc(s.source)}</span>` : ''
+    }</p>`;
+  }
+
+  function levelHtml(box) {
+    const dots = Array.from({ length: Store.MAX_BOX }, (_, i) => `<i class="${i < box ? 'on' : ''}"></i>`).join('');
+    const label = box >= Store.MAX_BOX ? 'öğrenildi' : `seviye ${box}`;
+    return `<span class="level" title="Leitner kutusu ${box}/${Store.MAX_BOX}">${dots}<span class="level-label">${label}</span></span>`;
+  }
+
+  // "bugün", "yarın", "3 gün sonra", "2 gün önce"
+  function relDay(t) {
+    const d = Math.round((new Date(t).setHours(0, 0, 0, 0) - startOfToday()) / DAY);
+    if (d === 0) return 'bugün';
+    if (d === 1) return 'yarın';
+    if (d === -1) return 'dün';
+    return d > 0 ? `${d} gün sonra` : `${-d} gün önce`;
   }
 
   /* ================= Görünümler ================= */
+
+  let session = null;
+
+  function currentView() {
+    return ['today', 'words', 'game'].find((v) => !$(`#view-${v}`).hidden);
+  }
 
   function showView(name) {
     $$('.tab').forEach((t) => {
@@ -149,38 +211,51 @@
       t.setAttribute('aria-selected', String(on));
     });
     for (const v of ['today', 'words', 'game']) $(`#view-${v}`).hidden = name !== v;
-    if (name === 'game' && !session) showSetup();
+    if (name === 'game' && (!session || session.finished)) showSetup();
     if (name === 'today') renderToday();
+    if (name === 'words') renderList();
+    updateFocusMode();
     window.scrollTo(0, 0);
   }
   $$('.tab').forEach((t) => t.addEventListener('click', () => showView(t.dataset.view)));
 
-  function renderStats() {
-    const s = Store.stats();
-    $('#stat-total').textContent = s.total;
-    $('#stat-due').textContent = s.due;
-    $('#stat-mastered').textContent = s.mastered;
-    $('#stat-drafts').textContent = `${s.drafts} / ${s.review}`;
-    $('#pending-text').innerHTML =
-      s.drafts || s.review
-        ? `<strong>${s.drafts}</strong> taslak ve <strong>${s.review}</strong> gözden geçirilecek kelime var. İstek metnini kopyala, YZ'ye yapıştır, cevabı geri yapıştır.`
-        : 'Bekleyen taslak yok. Mevcut kelimeleri de seçip yeniden doldurtabilirsin.';
+  // Oyun oynanırken dikkat dağıtan öğeler gizlenir (telefonda alt menü, sabit "Devam" düğmesi).
+  function updateFocusMode() {
+    const playing = currentView() === 'game' && !$('#game-play').hidden;
+    document.body.classList.toggle('in-game', playing);
   }
 
-  $('#stat-pending').addEventListener('click', () => showWordsWith({ status: 'pending' }));
+  /* ================= Kelime ekleme (hızlı) ================= */
 
-  /* ================= Hızlı ekleme ================= */
-
+  const quickDlg = $('#quick-dlg');
   const quick = $('#quick-form');
+
+  function openQuick({ form = '', sentence = '', source = null } = {}) {
+    const E = quick.elements;
+    E.form.value = form;
+    E.sentence.value = sentence;
+    if (source !== null) E.source.value = source; // yoksa önceki kaynak korunur
+    $('#quick-ok').hidden = true;
+    $('#quick-error').hidden = true;
+    E.form.dispatchEvent(new Event('input'));
+    if (!quickDlg.open) quickDlg.showModal();
+    (form ? quick.querySelector('button[type="submit"]') : E.form).focus();
+  }
+
+  $('#add-btn').addEventListener('click', () => openQuick());
 
   quick.addEventListener('submit', (e) => {
     e.preventDefault();
     const E = quick.elements;
     try {
       const res = Store.quickAdd({ form: E.form.value, sentence: E.sentence.value, source: E.source.value });
-      if (res.duplicate) toast(`"${res.word.word}" bu cümleyle zaten kayıtlı`);
-      else if (res.added) toast(`"${res.word.word}" taslak olarak eklendi`);
-      else toast(`"${res.word.word}" kaydına yeni bağlam eklendi`);
+      const ok = $('#quick-ok');
+      ok.textContent = res.duplicate
+        ? `"${res.word.word}" bu cümleyle zaten kayıtlı.`
+        : res.added
+          ? `"${res.word.word}" taslak olarak eklendi. Sıradaki kelimeyi yazabilirsin.`
+          : `"${res.word.word}" kaydına yeni bağlam eklendi.`;
+      ok.hidden = false;
       // Kaynak korunur: aynı metinden art arda kelime eklemek kolay olsun.
       E.form.value = '';
       E.sentence.value = '';
@@ -204,25 +279,121 @@
     const existing = Store.findByForm(value);
     if (existing) {
       const via = existing.word !== keyOf(value) ? ` ("${esc(keyOf(value))}" hâliyle)` : '';
-      hint.innerHTML = `"${esc(existing.word)}" zaten listede${via}; cümleyi eklersen o kayda bağlam olarak eklenir. <button type="button" class="link" data-edit="${esc(existing.id)}">Düzenle</button>`;
+      hint.innerHTML = `"${esc(existing.word)}" zaten listede${via}; cümleyi eklersen o kayda bağlam olarak eklenir. <button type="button" class="link" data-open="${esc(existing.id)}">Göster</button>`;
       hint.hidden = false;
     } else {
       hint.hidden = true;
     }
     $('#quick-error').hidden = true;
+    $('#quick-ok').hidden = true;
   });
   $('#dup-hint').addEventListener('click', (e) => {
-    const id = e.target.dataset?.edit;
-    if (id) openEdit(id);
+    const id = e.target.dataset?.open;
+    if (id) openWord(id);
   });
 
-  $('#manual-btn').addEventListener('click', () => openEdit(null, quick.elements.form.value));
+  $('#manual-btn').addEventListener('click', () => {
+    const word = quick.elements.form.value;
+    quickDlg.close();
+    openEdit(null, word);
+  });
+
+  /* ================= Kelime ayrıntısı ================= */
+
+  const wordDlg = $('#word-dlg');
+  let shownId = null;
+
+  function reviewHtml(w) {
+    if (!w.review.length) return '';
+    const items = w.review.map((code) => {
+      const r = Store.reviewInfo(code);
+      const actions = r.lemma
+        ? `<button class="link" data-action="lemma" data-to="${esc(r.lemma)}">"${esc(r.lemma)}" yap</button> · <button class="link" data-action="dismiss" data-code="${esc(code)}">böyle kalsın</button>`
+        : `<button class="link" data-action="dismiss" data-code="${esc(code)}">tamam</button>`;
+      return `<li>${esc(r.text)} <span class="review-actions">${actions}</span></li>`;
+    });
+    return `<ul class="review-list">${items.join('')}</ul>`;
+  }
+
+  function renderWord(w) {
+    const draft = Store.isDraft(w);
+    const forms = [...new Set(w.seen.map((s) => s.form).filter((f) => f && f !== w.word))];
+    const sentences = w.seen.filter((s) => s.sentence);
+    const sourcesOnly = [...new Set(w.seen.filter((s) => s.source && !s.sentence).map((s) => s.source))];
+    $('#word-title').innerHTML =
+      `${esc(w.word)}` +
+      (draft ? ' <span class="badge badge-draft">taslak</span>' : '') +
+      (w.review.length ? ' <span class="badge badge-warn">gözden geçir</span>' : '');
+    const stats = draft
+      ? ''
+      : `<div class="word-stats">
+          ${levelHtml(w.box)}
+          <span>${w.correct} doğru · ${w.wrong} yanlış</span>
+          <span>Sonraki tekrar: <strong>${w.due <= Date.now() ? 'şimdi' : esc(relDay(w.due))}</strong></span>
+          ${w.lastSeen ? `<span>Son çalışma: ${esc(relDay(w.lastSeen))}</span>` : ''}
+        </div>`;
+    $('#word-body').innerHTML = `
+      ${forms.length ? `<div class="meta">Metindeki hâli: ${esc(forms.join(', '))}</div>` : ''}
+      ${reviewHtml(w)}
+      ${draft ? '<p class="muted">Anlamı yok. Kelimeler sayfasındaki <strong>YZ ile doldur</strong> ile tamamla ya da düzenle.</p>' : `<div class="senses">${sensesHtml(w.senses, w.primary)}</div>`}
+      ${sentences.length ? `<h4>Gördüğün yerler</h4>${sentences.map((s) => sentenceHtml(s, w)).join('')}` : ''}
+      ${sourcesOnly.length ? `<div class="meta">Kaynak: ${esc(sourcesOnly.join(', '))}</div>` : ''}
+      ${extrasHtml(w) ? `<h4>Kök ve notlar</h4><div class="extras">${extrasHtml(w)}</div>` : ''}
+      ${stats}`;
+  }
+
+  function openWord(id) {
+    const w = Store.get(id);
+    if (!w) return;
+    shownId = id;
+    renderWord(w);
+    for (const d of $$('dialog[open]')) if (d !== wordDlg) d.close();
+    if (!wordDlg.open) wordDlg.showModal();
+    $('#word-edit').focus();
+  }
+
+  $('#word-body').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action]');
+    const w = shownId && Store.get(shownId);
+    if (!btn || !w) return;
+    if (btn.dataset.action === 'lemma') {
+      const target = btn.dataset.to;
+      const exists = Store.findByWord(target);
+      const res = Store.rename(w.id, target);
+      toast(exists ? `"${w.word}", "${res.word}" kaydıyla birleştirildi` : `"${target}" olarak kaydedildi`);
+      openWord(res.id);
+    } else if (btn.dataset.action === 'dismiss') {
+      Store.dismissReview(w.id, btn.dataset.code);
+      renderWord(Store.get(w.id));
+    }
+  });
+
+  $('#word-edit').addEventListener('click', () => {
+    const id = shownId;
+    wordDlg.close();
+    openEdit(id, '', { backToWord: true });
+  });
+
+  $('#word-delete').addEventListener('click', () => {
+    const w = shownId && Store.get(shownId);
+    if (!w) return;
+    wordDlg.close();
+    const removed = Store.remove(w.id);
+    toast(`"${w.word}" silindi`, 'info', {
+      label: 'Geri al',
+      fn: () => {
+        Store.restore(removed);
+        toast(`"${w.word}" geri alındı`);
+      },
+    });
+  });
 
   /* ================= Düzenleme penceresi ================= */
 
   const editDlg = $('#edit-dlg');
   const editForm = $('#edit-form');
   let editingId = null;
+  let editBackToWord = false;
 
   function renderPrimaryOptions(selected) {
     const sel = editForm.elements.primary;
@@ -256,9 +427,10 @@
       date: r.dataset.date,
     }));
 
-  function openEdit(id, prefillWord = '') {
+  function openEdit(id, prefillWord = '', { backToWord = false } = {}) {
     const w = id ? Store.get(id) : null;
     editingId = w ? w.id : null;
+    editBackToWord = backToWord && Boolean(w);
     const E = editForm.elements;
     $('#edit-title').textContent = w ? `"${w.word}" düzenle` : 'Yeni kelime (elle)';
     E.word.value = w ? w.word : keyOf(prefillWord);
@@ -297,7 +469,10 @@
   $('#seen-rows').addEventListener('click', (e) => {
     if (e.target.closest('[data-remove]')) e.target.closest('.seen-row').remove();
   });
-  $('#edit-cancel').addEventListener('click', () => editDlg.close());
+  $('#edit-cancel').addEventListener('click', () => {
+    editDlg.close();
+    if (editBackToWord && editingId) openWord(editingId);
+  });
   editForm.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
@@ -323,6 +498,7 @@
       const w = Store.save(editingId, fields);
       editDlg.close();
       toast(old ? `"${w.word}" kaydedildi` : `"${w.word}" eklendi`);
+      if (editBackToWord || !old) openWord(w.id);
     } catch (err) {
       const el = $('#edit-error');
       el.textContent = err.message;
@@ -334,55 +510,33 @@
 
   const searchEl = $('#search');
   const sortEl = $('#sort');
-  const filterEl = $('#filter');
+  const posFilterEl = $('#pos-filter');
 
-  function levelHtml(box) {
-    const dots = Array.from({ length: Store.MAX_BOX }, (_, i) => `<i class="${i < box ? 'on' : ''}"></i>`).join('');
-    const label = box >= Store.MAX_BOX ? 'öğrenildi' : `seviye ${box}`;
-    return `<span class="level" title="Leitner kutusu ${box}/${Store.MAX_BOX}">${dots}<span class="level-label">${label}</span></span>`;
-  }
+  // Süzgeç durumu: her grupta en fazla bir seçim
+  const filters = { status: '', level: '', days: '' };
 
-  function reviewHtml(w) {
-    if (!w.review.length) return '';
-    const items = w.review.map((code) => {
-      const r = Store.reviewInfo(code);
-      const actions = r.lemma
-        ? `<button class="link" data-action="lemma" data-to="${esc(r.lemma)}">"${esc(r.lemma)}" yap</button> · <button class="link" data-action="dismiss" data-code="${esc(code)}">böyle kalsın</button>`
-        : `<button class="link" data-action="dismiss" data-code="${esc(code)}">tamam</button>`;
-      return `<li>${esc(r.text)} <span class="review-actions">${actions}</span></li>`;
-    });
-    return `<ul class="review-list">${items.join('')}</ul>`;
-  }
+  const STATUS = {
+    draft: (w) => Store.isDraft(w),
+    review: (w) => w.review.length > 0,
+    pending: (w) => Store.isDraft(w) || w.review.length > 0,
+  };
+  const LEVELS = {
+    due: (w) => !Store.isDraft(w) && w.due <= Date.now(),
+    new: (w) => !Store.isDraft(w) && !w.correct && !w.wrong,
+    weak: (w) => !Store.isDraft(w) && (w.correct || w.wrong) && w.box <= 2,
+    mastered: (w) => w.box >= Store.MAX_BOX,
+  };
+  const recent = (days) => (w) => w.createdAt >= sinceDays(days);
 
-  function cardHtml(w) {
-    const draft = Store.isDraft(w);
-    const forms = [...new Set(w.seen.map((s) => s.form).filter((f) => f && f !== w.word))];
-    return `
-      <article class="card${draft ? ' is-draft' : ''}" data-id="${esc(w.id)}">
-        <div class="card-head">
-          <div class="card-word">${esc(w.word)}</div>
-          <div class="card-badges">
-            ${draft ? '<span class="badge badge-draft">taslak</span>' : ''}
-            ${w.review.length ? '<span class="badge badge-warn">gözden geçir</span>' : ''}
-          </div>
-        </div>
-        ${forms.length ? `<div class="meta">Metindeki hâli: ${esc(forms.join(', '))}</div>` : ''}
-        ${draft ? '<p class="muted small draft-text">Anlamı yok. "YZ ile doldur" ile tamamla ya da düzenle.</p>' : `<div class="senses">${sensesHtml(w.senses, w.primary)}</div>`}
-        ${seenHtml(w)}
-        ${extrasHtml(w)}
-        ${reviewHtml(w)}
-        <div class="card-foot">
-          <div>
-            ${draft ? '' : levelHtml(w.box)}
-            ${w.correct || w.wrong ? `<div class="meta">${w.correct} doğru · ${w.wrong} yanlış</div>` : ''}
-          </div>
-          <div class="card-actions">
-            <button class="btn btn-sm" data-action="edit">Düzenle</button>
-            <button class="btn btn-sm btn-danger" data-action="delete" aria-label="${esc(w.word)} sil">Sil</button>
-          </div>
-        </div>
-      </article>`;
-  }
+  const CHIPS = [
+    { g: 'status', v: 'draft', label: 'Taslak', test: STATUS.draft },
+    { g: 'status', v: 'review', label: 'Gözden geçir', test: STATUS.review },
+    { g: 'level', v: 'due', label: 'Tekrar zamanı', test: LEVELS.due },
+    { g: 'level', v: 'weak', label: 'Zayıf', test: LEVELS.weak },
+    { g: 'level', v: 'new', label: 'Hiç sorulmamış', test: LEVELS.new },
+    { g: 'level', v: 'mastered', label: 'Öğrenilmiş', test: LEVELS.mastered },
+    { g: 'days', v: '7', label: 'Bu hafta', test: recent(7) },
+  ];
 
   const searchText = (w) =>
     [
@@ -398,40 +552,14 @@
       .map(normTr)
       .join('\n');
 
-  const FILTERS = {
-    all: () => true,
-    draft: (w) => Store.isDraft(w),
-    review: (w) => w.review.length > 0,
-    pending: (w) => Store.isDraft(w) || w.review.length > 0,
-    ready: (w) => !Store.isDraft(w) && !w.review.length,
-  };
-
-  const posFilterEl = $('#pos-filter');
-  const levelFilterEl = $('#level-filter');
-  const dateFilterEl = $('#date-filter');
-
-  const LEVELS = {
-    due: (w) => !Store.isDraft(w) && w.due <= Date.now(),
-    new: (w) => !Store.isDraft(w) && !w.correct && !w.wrong,
-    weak: (w) => !Store.isDraft(w) && (w.correct || w.wrong) && w.box <= 2,
-    mid: (w) => w.box >= 3 && w.box < Store.MAX_BOX,
-    mastered: (w) => w.box >= Store.MAX_BOX,
-  };
-
-  const DAY = 24 * 60 * 60 * 1000;
-  const startOfToday = () => new Date().setHours(0, 0, 0, 0);
-  // "Son n gün": bugün dahil n takvim günü
-  const sinceDays = (n) => startOfToday() - (n - 1) * DAY;
-
   function filteredWords() {
     const q = normTr(searchEl.value);
-    let list = Store.all().filter(FILTERS[filterEl.value] || FILTERS.all);
+    let list = Store.all();
+    if (filters.status) list = list.filter(STATUS[filters.status] || (() => true));
+    if (filters.level) list = list.filter(LEVELS[filters.level] || (() => true));
+    if (filters.days) list = list.filter(recent(Number(filters.days)));
     const pos = posFilterEl.value;
     if (pos) list = list.filter((w) => (w.senses[pos] || []).length > 0);
-    const level = LEVELS[levelFilterEl.value];
-    if (level) list = list.filter(level);
-    const days = Number(dateFilterEl.value);
-    if (days) list = list.filter((w) => w.createdAt >= sinceDays(days));
     if (q) list = list.filter((w) => searchText(w).includes(q));
     const sorted = list.slice();
     switch (sortEl.value) {
@@ -447,75 +575,97 @@
     return sorted;
   }
 
-  const filterEls = () => [filterEl, posFilterEl, levelFilterEl, dateFilterEl];
-  const filtersActive = () =>
-    filterEl.value !== 'all' || posFilterEl.value || levelFilterEl.value || dateFilterEl.value || searchEl.value;
+  const filtersActive = () => Boolean(filters.status || filters.level || filters.days || posFilterEl.value || searchEl.value);
 
-  // Kelimeler görünümünü belirli süzgeçlerle aç (Bugün ekranından ve özet kutusundan).
-  function showWordsWith({ status = 'all', pos = '', level = '', days = '', search = '' } = {}) {
-    filterEl.value = status;
+  // Kelimeler görünümünü belirli süzgeçlerle aç (Bugün ekranından).
+  function showWordsWith({ status = '', level = '', days = '', pos = '', search = '' } = {}) {
+    Object.assign(filters, { status, level, days });
     posFilterEl.value = pos;
-    levelFilterEl.value = level;
-    dateFilterEl.value = days;
     searchEl.value = search;
     showView('words');
+  }
+
+  function renderChips() {
+    const all = Store.all();
+    const none = !filters.status && !filters.level && !filters.days;
+    $('#filter-chips').innerHTML =
+      `<button type="button" class="fchip${none ? ' is-on' : ''}" data-g="" aria-pressed="${none}">Tümü <span class="fchip-n">${all.length}</span></button>` +
+      CHIPS.map((c) => {
+        const n = all.filter(c.test).length;
+        const on = filters[c.g] === c.v;
+        if (!n && !on) return '';
+        return `<button type="button" class="fchip${on ? ' is-on' : ''}" data-g="${c.g}" data-v="${c.v}" aria-pressed="${on}">${esc(c.label)} <span class="fchip-n">${n}</span></button>`;
+      }).join('');
+  }
+
+  $('#filter-chips').addEventListener('click', (e) => {
+    const chip = e.target.closest('.fchip');
+    if (!chip) return;
+    const { g, v } = chip.dataset;
+    if (!g) Object.assign(filters, { status: '', level: '', days: '' });
+    else filters[g] = filters[g] === v ? '' : v;
     renderList();
+  });
+
+  function cardHtml(w) {
+    const draft = Store.isDraft(w);
+    const s = w.seen.find((x) => x.sentence);
+    return `
+      <article class="card${draft ? ' is-draft' : ''}" data-id="${esc(w.id)}" tabindex="0" role="button" aria-label="${esc(w.word)} ayrıntıları">
+        <div class="card-head">
+          <div class="card-word">${esc(w.word)}</div>
+          <div class="card-badges">
+            ${draft ? '<span class="badge badge-draft">taslak</span>' : ''}
+            ${w.review.length ? '<span class="badge badge-warn">gözden geçir</span>' : ''}
+          </div>
+        </div>
+        ${draft ? '<p class="muted small draft-text">Anlamı yok — YZ ile doldur.</p>' : `<div class="senses">${sensesHtml(w.senses, w.primary, { skipEmpty: true })}</div>`}
+        ${s ? sentenceHtml(s, w, 'example clamp') : ''}
+        <div class="card-foot">
+          ${draft ? '<span class="meta">Oyunda sorulmaz</span>' : levelHtml(w.box)}
+          ${w.note ? '<span class="meta" title="Bu kelimenin notu var">✎ not var</span>' : ''}
+        </div>
+      </article>`;
   }
 
   function renderList() {
+    if ($('#view-words').hidden) return;
     const total = Store.all().length;
     const list = filteredWords();
+    renderChips();
     $('#clear-filters').hidden = !filtersActive();
     $('#word-grid').innerHTML = list.map(cardHtml).join('');
     $('#empty-state').hidden = total > 0;
-    $('#list-count').textContent = total ? (list.length === total ? `${total} kelime` : `${list.length} / ${total}`) : '';
+    $('#list-count').textContent = total ? (list.length === total ? `${total} kelime` : `${list.length} / ${total} kelime`) : '';
     if (total > 0 && list.length === 0) {
       $('#word-grid').innerHTML = `<p class="muted">Bu süzgeçle eşleşen kelime yok.</p>`;
     }
+    const pending = Store.stats().drafts;
+    $('#ai-count').hidden = !pending;
+    $('#ai-count').textContent = pending;
   }
 
   searchEl.addEventListener('input', renderList);
-  sortEl.addEventListener('change', renderList);
-  filterEls().forEach((el) => el.addEventListener('change', renderList));
+  sortEl.addEventListener('change', () => {
+    pref.set('sort', sortEl.value);
+    renderList();
+  });
+  sortEl.value = pref.get('sort', 'new');
+  posFilterEl.addEventListener('change', renderList);
   $('#clear-filters').addEventListener('click', () => showWordsWith());
 
-  $('#word-grid').addEventListener('click', async (e) => {
-    const btn = e.target.closest('button[data-action]');
-    if (!btn) return;
-    const id = btn.closest('.card').dataset.id;
-    const w = Store.get(id);
-    if (!w) return;
-    switch (btn.dataset.action) {
-      case 'edit':
-        openEdit(id);
-        break;
-      case 'lemma': {
-        const target = btn.dataset.to;
-        const exists = Store.findByWord(target);
-        const res = Store.rename(id, target);
-        toast(exists ? `"${w.word}", "${res.word}" kaydıyla birleştirildi` : `"${target}" olarak kaydedildi`);
-        break;
-      }
-      case 'dismiss':
-        Store.dismissReview(id, btn.dataset.code);
-        break;
-      case 'delete': {
-        const res = await ask({
-          title: `"${w.word}" silinsin mi?`,
-          html: '<p>Kelime ve ilerleme bilgisi kalıcı olarak silinir.</p>',
-          buttons: [
-            { label: 'Vazgeç', value: 'cancel', kind: 'ghost' },
-            { label: 'Sil', value: 'delete', kind: 'danger' },
-          ],
-        });
-        if (res === 'delete') {
-          Store.remove(id);
-          toast(`"${w.word}" silindi`);
-        }
-        break;
-      }
+  $('#word-grid').addEventListener('click', (e) => {
+    const card = e.target.closest('.card');
+    if (card) openWord(card.dataset.id);
+  });
+  $('#word-grid').addEventListener('keydown', (e) => {
+    const card = e.target.closest('.card');
+    if (card && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      openWord(card.dataset.id);
     }
   });
+  $('#empty-add').addEventListener('click', () => openQuick());
 
   /* ================= YZ ile doldurma ================= */
 
@@ -524,8 +674,13 @@
   let aiResult = null;
 
   function aiStep(n) {
-    $('#ai-step1').hidden = n !== 1;
-    $('#ai-step2').hidden = n !== 2;
+    for (const i of [1, 2, 3]) $(`#ai-step${i}`).hidden = n !== i;
+    $$('#ai-steps li').forEach((li) => {
+      const s = Number(li.dataset.step);
+      li.classList.toggle('is-current', s === n);
+      li.classList.toggle('is-done', s < n);
+    });
+    if (n === 2) $('#ai-answer').focus();
   }
 
   function openAI() {
@@ -540,7 +695,7 @@
     aiDlg.showModal();
   }
   $('#ai-btn').addEventListener('click', openAI);
-  $('#ai-close').addEventListener('click', () => aiDlg.close());
+  $$('[data-ai-back]').forEach((b) => b.addEventListener('click', () => aiStep(Number(b.dataset.aiBack))));
 
   const aiRank = (w) => (Store.isDraft(w) ? 0 : w.review.length ? 1 : 2);
 
@@ -613,9 +768,25 @@
 
   $('#ai-copy').addEventListener('click', async () => {
     const ok = await copyText($('#ai-prompt').value);
-    if (ok) toast('İstek kopyalandı. YZ\'ye yapıştır, cevabını aşağıya yapıştır.');
-    else toast('Kopyalanamadı; "İstek metnini göster" bölümünden elle kopyala.', 'error');
-    if (ok) $('#ai-answer').focus();
+    if (!ok) {
+      toast('Kopyalanamadı; "İstek metnini göster" bölümünden elle kopyala.', 'error');
+      return;
+    }
+    aiStep(2);
+  });
+  $('#ai-recopy').addEventListener('click', async () => {
+    if (await copyText($('#ai-prompt').value)) toast('İstek yeniden kopyalandı');
+  });
+  $('#ai-paste').addEventListener('click', async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) throw new Error('empty');
+      $('#ai-answer').value = text;
+      checkAnswer();
+    } catch {
+      $('#ai-answer').focus();
+      toast('Panoya erişilemedi; cevabı Ctrl+V ile kutuya yapıştır.');
+    }
   });
 
   const ACTION_KIND = { fill: 'ok', update: 'ok', rename: 'ok', merge: 'warn', other: 'warn', new: 'info' };
@@ -641,7 +812,7 @@
       </div>`;
   }
 
-  $('#ai-check').addEventListener('click', () => {
+  function checkAnswer() {
     const errEl = $('#ai-error');
     try {
       aiResult = AI.check($('#ai-answer').value, aiWords());
@@ -658,8 +829,9 @@
       (missing.length ? `<br><span class="text-warn">YZ şu kelimeleri döndürmedi: ${esc(missing.join(', '))}</span>` : '');
     $('#ai-preview').innerHTML = items.map(aiItemHtml).join('') || '<p class="muted">Cevapta kayıt yok.</p>';
     updateApplyBtn();
-    aiStep(2);
-  });
+    aiStep(3);
+  }
+  $('#ai-check').addEventListener('click', checkAnswer);
 
   function updateApplyBtn() {
     const n = $$('#ai-preview input[data-i]:checked').length;
@@ -667,7 +839,6 @@
     $('#ai-apply').textContent = n ? `${n} kelimeyi kaydet` : 'Seçilenleri kaydet';
   }
   $('#ai-preview').addEventListener('change', updateApplyBtn);
-  $('#ai-back').addEventListener('click', () => aiStep(1));
 
   $('#ai-apply').addEventListener('click', () => {
     const chosen = $$('#ai-preview input[data-i]:checked')
@@ -681,9 +852,28 @@
 
   /* ================= Oyun ================= */
 
-  let session = null;
-
   const gameMode = () => $('input[name="mode"]:checked').value;
+
+  function setMode(mode) {
+    const radio = $(`input[name="mode"][value="${mode}"]`);
+    if (!radio) return;
+    radio.checked = true;
+    $('#today-mode').value = mode;
+    pref.set('mode', mode);
+  }
+
+  // Son kullanılan oyun ayarları hatırlanır.
+  setMode(pref.get('mode', 'en-tr'));
+  $('#q-count').value = pref.get('qcount', '10');
+  $('#q-strategy').value = pref.get('qstrategy', 'smart');
+  $('#q-count').addEventListener('change', () => pref.set('qcount', $('#q-count').value));
+  $('#q-strategy').addEventListener('change', () => pref.set('qstrategy', $('#q-strategy').value));
+  $$('input[name="mode"]').forEach((r) =>
+    r.addEventListener('change', () => {
+      setMode(r.value);
+      renderSetupInfo();
+    })
+  );
 
   function showSetup() {
     session = null;
@@ -691,19 +881,27 @@
     $('#game-play').hidden = true;
     $('#game-summary').hidden = true;
     renderSetupInfo();
+    updateFocusMode();
   }
 
   // Mod için uygun kelime yoksa nedenini açıkla.
   const EMPTY_MODE = {
-    cloze: 'Bu mod, cümlesi kaydedilmiş kelimelerle oynanır. Hızlı ekle ile kelimeyi gördüğün cümleyle birlikte kaydet.',
+    cloze: 'Bu mod, cümlesi kaydedilmiş kelimelerle oynanır. Kelime eklerken gördüğün cümleyi de yaz.',
     confuse: 'Bu mod, aynı Türkçe anlamı paylaşan kelimelerle oynanır; şu an böyle bir çift yok.',
     root: 'Bu mod, kökü ya da türediği kelimesi girilmiş kelimelerle oynanır.',
   };
 
   function renderSetupInfo() {
     const all = Store.all();
-    const mode = gameMode();
     const playable = Quiz.playable(all);
+    // Her mod kartında oynanabilir kelime sayısı
+    for (const em of $$('#mode-grid [data-count]')) {
+      const n = Quiz.eligible(all, em.dataset.count).length;
+      em.textContent = `${n} kelime`;
+      const card = em.closest('.mode-card');
+      card.classList.toggle('is-empty', n === 0);
+    }
+    const mode = gameMode();
     const pool = Quiz.eligible(all, mode);
     const drafts = all.length - playable.length;
     const due = pool.filter((w) => w.due <= Date.now()).length;
@@ -723,7 +921,6 @@
       start.disabled = false;
     }
   }
-  $$('input[name="mode"]').forEach((r) => r.addEventListener('change', renderSetupInfo));
 
   function startGame(onlyWords) {
     const all = Store.all();
@@ -742,6 +939,7 @@
     $('#game-setup').hidden = true;
     $('#game-summary').hidden = true;
     $('#game-play').hidden = false;
+    updateFocusMode();
     renderQuestion();
   }
 
@@ -778,11 +976,7 @@
     $('#q-hint').textContent = q.hint || '';
     const ctx = $('#q-context');
     ctx.hidden = !q.context;
-    ctx.innerHTML = q.context
-      ? `<p class="example">${highlight(q.context.sentence, q.context.form)}${
-          q.context.source ? `<span class="example-src"> — ${esc(q.context.source)}</span>` : ''
-        }</p>`
-      : '';
+    ctx.innerHTML = q.context ? sentenceHtml(q.context, q.target) : '';
     $('#feedback').hidden = true;
     $('.kbd-hint').innerHTML = KBD_HINTS[q.kind];
 
@@ -809,6 +1003,7 @@
     } else {
       $('#flip-btn').focus();
     }
+    window.scrollTo(0, 0);
   }
 
   function answerChoice(index) {
@@ -866,9 +1061,11 @@
   function record(correct) {
     const s = session;
     const q = s.questions[s.i];
+    const before = (Store.get(q.target.id) || q.target).box;
     if (correct) s.score += 1;
-    s.results.push({ word: q.target, correct });
     Store.recordAnswer(q.target.id, correct);
+    const after = (Store.get(q.target.id) || q.target).box;
+    s.results.push({ word: q.target, correct, before, after });
     $('#q-score').textContent = `${s.score} doğru`;
     $('#q-bar').style.width = `${((s.i + 1) / s.questions.length) * 100}%`;
   }
@@ -908,33 +1105,32 @@
     const isCard = correct === null;
     fb.className = 'feedback ' + (isCard ? 'neutral' : correct ? 'ok' : 'bad');
     const last = session.i + 1 >= session.questions.length;
+    const s = w.seen.find((x) => x.sentence);
     const actions = isCard
-      ? `<div class="grade-row">
+      ? `<div class="grade-row sticky-action">
            <button class="btn btn-danger" id="grade-no"><span class="key">1</span> Bilemedim</button>
            <button class="btn btn-primary" id="grade-yes"><span class="key">2</span> Bildim</button>
          </div>`
-      : `<button class="btn btn-primary" id="next-btn">${last ? 'Sonuçlar' : 'Devam'} ↵</button>`;
+      : `<div class="next-row sticky-action"><button class="btn btn-primary" id="next-btn">${last ? 'Sonuçlar' : 'Devam'} ↵</button></div>`;
     fb.innerHTML = `
       ${isCard ? '' : `<div class="feedback-title">${correct ? 'Doğru!' : 'Yanlış'}</div>`}
       ${note ? `<div class="small">${note}</div>` : ''}
-      <div class="feedback-row">
-        <div class="feedback-body">
-          <div><strong>${esc(w.word)}</strong></div>
-          <div class="senses">${sensesHtml(w.senses, w.primary, { skipEmpty: true })}</div>
-          ${q.mode === 'cloze' || q.mode === 'card' ? '' : seenHtml(w, 1)}
-          ${extrasHtml(w)}
-          ${relatedHtml(q)}
-        </div>
-        ${actions}
-      </div>`;
+      <div class="feedback-body">
+        <div class="feedback-word">${esc(w.word)}</div>
+        <div class="senses">${sensesHtml(w.senses, w.primary, { skipEmpty: true })}</div>
+        ${q.mode === 'cloze' || q.mode === 'card' || !s ? '' : sentenceHtml(s, w)}
+        ${extrasHtml(w)}
+        ${relatedHtml(q)}
+      </div>
+      ${actions}`;
     fb.hidden = false;
     if (isCard) {
       $('#grade-no').addEventListener('click', () => gradeCard(false));
       $('#grade-yes').addEventListener('click', () => gradeCard(true));
-      $('#grade-yes').focus();
+      $('#grade-yes').focus({ preventScroll: true });
     } else {
       $('#next-btn').addEventListener('click', nextQuestion);
-      $('#next-btn').focus();
+      $('#next-btn').focus({ preventScroll: true });
     }
   }
 
@@ -953,33 +1149,52 @@
       showSetup();
       return;
     }
-    const missed = s.results.filter((r) => !r.correct).map((r) => r.word);
+    const missed = s.results.filter((r) => !r.correct);
+    const right = s.results.filter((r) => r.correct);
+    const leveled = right.filter((r) => r.after > r.before);
+    const mastered = right.filter((r) => r.after >= Store.MAX_BOX && r.before < Store.MAX_BOX);
     const pct = Math.round((s.score / answered) * 100);
+    const st = Store.stats();
+    const row = (r, extra = '') =>
+      `<div class="miss"><strong>${esc(r.word.word)}</strong><span>${esc(r.word.primary || r.word.meanings.slice(0, 3).join(', '))}</span>${extra}</div>`;
     const el = $('#game-summary');
     el.innerHTML = `
-      <h2>Oyun bitti</h2>
-      <div class="summary-score">${s.score} / ${answered}</div>
-      <p class="summary-sub">%${pct} başarı${missed.length ? ` · ${missed.length} kelimeyi tekrar etmelisin` : ' · Hepsini bildin!'}</p>
+      <div class="summary-head">
+        <div>
+          <h2>Oyun bitti</h2>
+          <div class="summary-score">${s.score} / ${answered}</div>
+          <p class="summary-sub">%${pct} başarı${missed.length ? '' : ' · Hepsini bildin!'}</p>
+        </div>
+        <div class="summary-badges">
+          ${leveled.length ? `<span class="pill pill-ok">${leveled.length} kelime seviye atladı</span>` : ''}
+          ${mastered.length ? `<span class="pill pill-ok">${mastered.length} kelime öğrenildi</span>` : ''}
+          <span class="pill">Bugün ${st.studiedToday} kelime çalıştın</span>
+          ${st.streak > 1 ? `<span class="pill pill-accent">${st.streak} gündür üst üste</span>` : ''}
+        </div>
+      </div>
+      ${missed.length ? `<h4>Tekrar etmen gerekenler (${missed.length})</h4><div class="miss-list">${missed.map((r) => row(r)).join('')}</div>` : ''}
       ${
-        missed.length
-          ? `<h4>Yanlış yaptıkların</h4><div class="miss-list">${missed
-              .map((w) => `<div class="miss"><strong>${esc(w.word)}</strong>${esc(w.primary || w.meanings.join(', '))}</div>`)
-              .join('')}</div>`
+        right.length
+          ? `<details class="sub-details"><summary>Doğru bildiklerin (${right.length})</summary><div class="miss-list">${right
+              .map((r) => row(r, `<em class="lvl">${r.after > r.before ? `seviye ${r.before} → ${r.after}` : `seviye ${r.after}`}</em>`))
+              .join('')}</div></details>`
           : ''
       }
       <div class="btn-row">
         ${missed.length ? '<button class="btn btn-primary" id="retry-missed">Yanlışları tekrar et</button>' : ''}
         <button class="btn ${missed.length ? '' : 'btn-primary'}" id="play-again">Yeni oyun</button>
-        <button class="btn btn-ghost" id="to-setup">Ayarlar</button>
+        <button class="btn btn-ghost" id="to-setup">Mod değiştir</button>
       </div>`;
     $('#game-play').hidden = true;
     el.hidden = false;
-    const missedWords = missed.map((w) => Store.get(w.id)).filter(Boolean);
+    const missedWords = missed.map((r) => Store.get(r.word.id)).filter(Boolean);
     session = { ...s, finished: true };
+    updateFocusMode();
     $('#retry-missed')?.addEventListener('click', () => startGame(missedWords));
     $('#play-again').addEventListener('click', () => startGame());
     $('#to-setup').addEventListener('click', showSetup);
-    ($('#retry-missed') || $('#play-again')).focus();
+    window.scrollTo(0, 0);
+    ($('#retry-missed') || $('#play-again')).focus({ preventScroll: true });
   }
 
   $('#start-btn').addEventListener('click', () => startGame());
@@ -998,30 +1213,46 @@
   $('#dont-know').addEventListener('click', () => answerTyped(true));
   $('#flip-btn').addEventListener('click', flipCard);
 
+  /* ================= Klavye kısayolları ================= */
+
+  const typing = (el) => el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+
   document.addEventListener('keydown', (e) => {
-    if ($('#view-game').hidden || $('#game-play').hidden || !session || session.finished) return;
-    if (document.querySelector('dialog[open]')) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    const q = session.questions[session.i];
-    if (q.kind === 'card' && !session.answered) {
-      if (!session.flipped && (e.key === ' ' || e.key === 'Enter')) {
-        e.preventDefault();
-        flipCard();
-      } else if (session.flipped && (e.key === '1' || e.key === '2')) {
-        e.preventDefault();
-        gradeCard(e.key === '2');
-      } else if (session.flipped && (e.key === ' ' || e.key === 'Enter')) {
-        e.preventDefault(); // odaktaki puan butonuna yanlışlıkla basılmasın
+    if (document.querySelector('dialog[open]')) return;
+
+    const playing = currentView() === 'game' && !$('#game-play').hidden && session && !session.finished;
+    if (playing) {
+      const q = session.questions[session.i];
+      if (q.kind === 'card' && !session.answered) {
+        if (!session.flipped && (e.key === ' ' || e.key === 'Enter')) {
+          e.preventDefault();
+          flipCard();
+        } else if (session.flipped && (e.key === '1' || e.key === '2')) {
+          e.preventDefault();
+          gradeCard(e.key === '2');
+        } else if (session.flipped && (e.key === ' ' || e.key === 'Enter')) {
+          e.preventDefault(); // odaktaki puan butonuna yanlışlıkla basılmasın
+        }
+        return;
       }
+      if (session.answered && e.key === 'Enter') {
+        e.preventDefault(); // odaktaki "Devam" butonunun ikinci kez tetiklenmesini önler
+        nextQuestion();
+        return;
+      }
+      if (!session.answered && q.kind === 'choice' && /^[1-9]$/.test(e.key)) answerChoice(Number(e.key) - 1);
       return;
     }
-    if (session.answered && e.key === 'Enter') {
-      e.preventDefault(); // odaktaki "Devam" butonunun ikinci kez tetiklenmesini önler
-      nextQuestion();
-      return;
-    }
-    if (!session.answered && q.kind === 'choice' && /^[1-9]$/.test(e.key)) {
-      answerChoice(Number(e.key) - 1);
+
+    if (typing(e.target)) return;
+    if (e.key === 'n' || e.key === 'N') {
+      e.preventDefault();
+      openQuick();
+    } else if (e.key === '/') {
+      e.preventDefault();
+      if (currentView() !== 'words') showView('words');
+      searchEl.focus();
     }
   });
 
@@ -1046,10 +1277,17 @@
   }
   FS.onStatus(renderDataStatus);
 
-  $('#data-btn').addEventListener('click', () => {
+  function openData(focusBookmark = false) {
     renderDataStatus();
     dataDlg.showModal();
-  });
+    if (focusBookmark) {
+      const sec = $('#bookmark-section');
+      sec.classList.add('is-highlight');
+      sec.scrollIntoView({ block: 'center' });
+      setTimeout(() => sec.classList.remove('is-highlight'), 2500);
+    }
+  }
+  $('#data-btn').addEventListener('click', () => openData());
 
   function download(name, text) {
     const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
@@ -1202,27 +1440,13 @@
 
   /* ================= Bugün ================= */
 
-  const MODE_KEY = 'jsondictionary.mode';
-  function setMode(mode) {
-    const radio = $(`input[name="mode"][value="${mode}"]`);
-    if (!radio) return;
-    radio.checked = true;
-    $('#today-mode').value = mode;
-    try {
-      localStorage.setItem(MODE_KEY, mode);
-    } catch {}
-  }
-  try {
-    setMode(localStorage.getItem(MODE_KEY) || 'en-tr');
-  } catch {}
-  $$('input[name="mode"]').forEach((r) => r.addEventListener('change', () => setMode(r.value)));
   $('#today-mode').addEventListener('change', (e) => {
     setMode(e.target.value);
     renderToday();
   });
 
   const miniItem = (w, extra = '') => `
-    <button type="button" class="mini-item" data-word="${esc(w.word)}">
+    <button type="button" class="mini-item" data-id="${esc(w.id)}">
       <strong>${esc(w.word)}</strong>
       <span class="muted">${Store.isDraft(w) ? 'taslak' : esc(w.primary || w.meanings.slice(0, 3).join(', '))}</span>
       ${extra}
@@ -1238,21 +1462,35 @@
     return { free: true, due: 0, words: Quiz.pickWords(all, 10, 'smart', mode) };
   }
 
+  function renderStats(s = Store.stats()) {
+    $('#stat-total').textContent = s.total;
+    $('#stat-mastered').textContent = s.mastered;
+    $('#stat-today').textContent = s.studiedToday;
+    $('#stat-streak').textContent = s.streak;
+  }
+
   function renderToday() {
     if ($('#view-today').hidden) return;
     const all = Store.all();
     const s = Store.stats();
+    const empty = all.length === 0;
+    // İlk açılış: yalnızca başlangıç rehberi
+    $('#onboarding').hidden = !empty;
+    for (const id of ['#stats', '#today-main', '#today-pending', '#today-weak-panel', '#today-recent-panel']) $(id).hidden = empty;
+    if (empty) return;
+
+    renderStats(s);
     const today = startOfToday();
     $('#today-date').textContent = new Date().toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' });
 
     const plan = todayPlan();
     $('#today-due').textContent = plan.due;
     $('#today-due-label').textContent = plan.due ? 'kelimenin tekrar zamanı geldi' : 'tekrar bekleyen kelime yok';
-    const studied = all.filter((w) => w.lastSeen && w.lastSeen >= today).length;
     const added = all.filter((w) => w.createdAt >= today).length;
     $('#today-studied').textContent =
-      [studied && `Bugün ${studied} kelime çalıştın.`, added && `Bugün ${added} kelime ekledin.`].filter(Boolean).join(' ') ||
-      'Bugün henüz çalışmadın.';
+      [s.studiedToday && `Bugün ${s.studiedToday} kelime çalıştın.`, added && `Bugün ${added} kelime ekledin.`]
+        .filter(Boolean)
+        .join(' ') || 'Bugün henüz çalışmadın.';
     const start = $('#today-start');
     start.disabled = plan.words.length === 0 || Quiz.playable(all).length < 2;
     start.textContent = plan.free ? 'Serbest tekrar' : 'Tekrara başla';
@@ -1264,7 +1502,7 @@
 
     $('#today-drafts').textContent = s.drafts;
     $('#today-review').textContent = s.review;
-    $('#today-added').textContent = all.filter((w) => w.createdAt >= sinceDays(7)).length;
+    $('#today-added').textContent = all.filter(recent(7)).length;
 
     const weak = all
       .filter((w) => w.wrong > 0)
@@ -1274,13 +1512,11 @@
       ? weak.map((w) => miniItem(w, `<span class="mini-meta">${w.wrong} yanlış</span>`)).join('')
       : '<p class="muted small">Henüz yanlış yaptığın kelime yok.</p>';
 
-    const recent = all
+    const latest = all
       .slice()
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, 6);
-    $('#today-recent').innerHTML = recent.length
-      ? recent.map((w) => miniItem(w)).join('')
-      : '<p class="muted small">Henüz kelime yok.</p>';
+    $('#today-recent').innerHTML = latest.map((w) => miniItem(w)).join('');
   }
 
   $('#today-start').addEventListener('click', () => {
@@ -1293,14 +1529,14 @@
   $('#today-ai').addEventListener('click', openAI);
   $('#today-show-review').addEventListener('click', () => showWordsWith({ status: 'review' }));
   $('#today-show-recent').addEventListener('click', () => showWordsWith({ days: '7' }));
-  $('#today-quick').addEventListener('click', () => {
-    showView('words');
-    quick.elements.form.focus();
-  });
+  $('#today-quick').addEventListener('click', () => openQuick());
   $('#view-today').addEventListener('click', (e) => {
     const item = e.target.closest('.mini-item');
-    if (item) showWordsWith({ search: item.dataset.word });
+    if (item) openWord(item.dataset.id);
   });
+  $('#ob-import').addEventListener('click', () => openFile('words'));
+  $('#ob-add').addEventListener('click', () => openQuick());
+  $('#ob-bookmark').addEventListener('click', () => openData(true));
 
   /* ================= Sayfadan ekleme (yer imi) ================= */
 
@@ -1328,7 +1564,7 @@
     $('#bookmarklet-note').textContent = `Yer imi şu adresi açar: ${appUrl}`;
   }
 
-  // #add?w=…&s=…&src=… ile açıldıysa hızlı ekleme formunu doldur.
+  // #add?w=…&s=…&src=… ile açıldıysa kelime ekleme penceresini doldur.
   function handleAddHash() {
     if (!location.hash.startsWith('#add?')) return;
     const p = new URLSearchParams(location.hash.slice(5));
@@ -1336,14 +1572,7 @@
     const word = (p.get('w') || '').trim();
     if (!word) return;
     for (const d of $$('dialog[open]')) d.close();
-    showView('words');
-    const E = quick.elements;
-    E.form.value = word;
-    E.sentence.value = p.get('s') || '';
-    E.source.value = p.get('src') || '';
-    E.form.dispatchEvent(new Event('input'));
-    quick.querySelector('button[type="submit"]').focus();
-    toast('Seçtiğin kelime forma yazıldı. Enter ile taslağa ekle.');
+    openQuick({ form: word, sentence: p.get('s') || '', source: p.get('src') || '' });
   }
   window.addEventListener('hashchange', handleAddHash);
 
@@ -1370,10 +1599,13 @@
   /* ================= Başlangıç ================= */
 
   function renderAll() {
-    renderStats();
     renderList();
     renderToday();
-    if (!$('#view-game').hidden && $('#game-setup').hidden === false) renderSetupInfo();
+    if (!$('#view-game').hidden && !$('#game-setup').hidden) renderSetupInfo();
+    if (wordDlg.open && shownId) {
+      const w = Store.get(shownId);
+      if (w) renderWord(w);
+    }
   }
   Store.onChange(renderAll);
   renderAll();

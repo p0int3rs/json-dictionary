@@ -20,24 +20,36 @@ GitHub Pages, Netlify gibi statik barındırmaya da olduğu gibi yüklenebilir.
 
 Uygulama bir adresten açıldığında (localhost ya da GitHub Pages) Chrome/Edge'de üst çubukta **Yükle** düğmesi çıkar; telefonda tarayıcı menüsünden "Ana ekrana ekle". Yüklenince kendi penceresinde açılır ve internet olmadan da çalışır (kelimeler zaten tarayıcıda durur). İnternet varken her açılışta en güncel sürüm yüklenir.
 
-## Bugün ekranı
+## Ekranlar
 
-Açılış ekranı: tekrar zamanı gelen kelime sayısı, seçtiğin modda **Tekrara başla** (en fazla 20 kelime; tekrar bekleyen yoksa en zayıf 10 kelimeyle serbest tekrar), bekleyen taslaklar ve gözden geçirilecekler, en çok zorlandığın ve son eklediğin kelimeler. Bir kelimeye tıklamak onu Kelimeler listesinde açar.
+- **Bugün** (açılış): özet (kelime, öğrenilmiş, bugün çalışılan, kaç gündür üst üste çalıştığın), tekrar zamanı gelen kelime sayısı ve seçtiğin modda **Tekrara başla** (en fazla 20 kelime; tekrar bekleyen yoksa en zayıf 10 kelimeyle serbest tekrar), bekleyen taslaklar, en çok zorlandığın ve son eklediğin kelimeler. Hiç kelime yoksa başlangıç rehberi görünür.
+- **Kelimeler**: sade kartlar (kelime, anlamlar, ilk cümle, seviye). Karta tıklayınca **ayrıntı penceresi** açılır: bütün cümleler, kök, köken, not, doğru/yanlış sayısı ve sonraki tekrar; **Düzenle** ve **Sil** buradadır. Silince birkaç saniye **Geri al** çıkar. Üstteki hızlı süzgeçler: Taslak, Gözden geçir, Tekrar zamanı, Zayıf, Hiç sorulmamış, Öğrenilmiş, Bu hafta; yanında tür ve sıralama.
+- **Oyun**: mod kartlarında her modda kaç kelime oynanabileceği yazar. Soru sayısı, kelime seçimi ve mod hatırlanır. Oyun sonunda seviye atlayan kelimeler ve doğru bildiklerin de görünür.
+- **Telefonda** gezinme ekranın altındadır; oyun sırasında gizlenir ve **Devam / Bildim** düğmeleri ekranın altına sabitlenir. Pencereler alttan açılır.
+
+### Kısayollar
+
+| Tuş | İş |
+|---|---|
+| <kbd>N</kbd> | Kelime ekle |
+| <kbd>/</kbd> | Kelimelerde ara |
+| <kbd>1</kbd>–<kbd>4</kbd>, <kbd>Enter</kbd> | Oyunda şık seç, devam et |
+| <kbd>Boşluk</kbd>, <kbd>1</kbd> / <kbd>2</kbd> | Kart modunda çevir, bilemedim / bildim |
 
 ## Sayfadan tek tıkla ekleme (yer imi)
 
-**Veri → Sayfadan ekleme** bölümündeki **+ Sözlüğe ekle** düğmesini tarayıcının yer imleri çubuğuna sürükle. Okuduğun herhangi bir sayfada kelimeyi seçip bu yer imine tıkladığında uygulama açılır; kelime, içinde geçtiği cümle ve sayfa başlığı hızlı ekleme formuna yazılmış olur, <kbd>Enter</kbd> ile taslağa eklersin. Uygulama zaten açıksa aynı sekme kullanılır.
+**Veri → Okurken tek tıkla ekleme** bölümündeki **+ Sözlüğe ekle** düğmesini tarayıcının yer imleri çubuğuna sürükle. Okuduğun herhangi bir sayfada kelimeyi seçip bu yer imine tıkladığında uygulama açılır; kelime, içinde geçtiği cümle ve sayfa başlığı **Kelime ekle** penceresine yazılmış olur, <kbd>Enter</kbd> ile taslağa eklersin. Uygulama zaten açıksa aynı sekme kullanılır.
 
 Yer imi, düğmeyi sürüklediğin adresi açar: localhost'tan sürüklersen sunucu açıkken çalışır, GitHub Pages adresinden sürüklersen her zaman çalışır.
 
 ## Kullanım akışı
 
-1. **Hızlı ekle**: okurken kelimeyi metinde gördüğün hâliyle (`held`), cümleyi ve kaynağı yaz. Kayıt **taslak** olur. Aynı kelimeyi tekrar eklersen yeni cümle o kayda bağlam olarak eklenir.
-2. **YZ ile doldur**: taslakları seç, **İsteği kopyala**, kullandığın YZ'ye yapıştır. YZ'nin cevabını geri yapıştırıp **Kontrol et**.
+1. **+ Kelime** (ya da <kbd>N</kbd>): okurken kelimeyi metinde gördüğün hâliyle (`held`), cümleyi ve kaynağı yaz. Kayıt **taslak** olur. Pencere açık kalır, art arda ekleyebilirsin. Aynı kelimeyi tekrar eklersen yeni cümle o kayda bağlam olarak eklenir.
+2. **Kelimeler → YZ ile doldur**: 3 adım. **Seç** (taslaklar hazır seçili) → **İsteği kopyala**, YZ'ye yapıştır → cevabı **Panodan yapıştır** ya da elle yapıştır → **Kontrol et**.
 3. Önizlemede her kelimenin anlamları, uyarılar (3'ten fazla anlam, `-mak/-mek` tutarsızlığı, cümledeki anlamın listede olmaması, kelimenin kendisini kök göstermesi…) ve başka kelimelerle ortak anlamlar görünür. İstediklerini kaydet.
 4. YZ kelimeyi yalın hâline taşırsa (`held` → `hold`) kayıt yeniden adlandırılır, `held` "metindeki hâl" olarak saklanır, oyun ilerlemesi korunur.
 
-Elle girmek istersen **Elle tam giriş** ya da kartlardaki **Düzenle** penceresini kullan. Anlamlar orada satır satır yazılır:
+Elle girmek istersen **Kelime ekle → Elle tam giriş** ya da ayrıntı penceresindeki **Düzenle**'yi kullan. Anlamlar orada satır satır yazılır:
 
 ```
 fiil: düzenlemek, tutmak
@@ -91,12 +103,12 @@ Tarayıcıdaki eski veriler ilk açılışta kendiliğinden dönüştürülür; 
 
 - Kelimeler tarayıcının `localStorage` alanında saklanır.
 - **Veri → İçe aktar / Dışa aktar**: kelime dosyası.
-- **Veri → Dosyaya bağla** (Chrome, Edge, Brave): her değişiklik seçtiğin `.json` dosyasına otomatik yazılır. Dosyayı Dropbox/Syncthing/Drive klasörüne koyarsan Windows ve Linux aynı listeyi kullanır. Açılışta içerik farklıysa en son değişen taraf kullanılır.
+- **Veri → Gelişmiş → Dosyaya bağla** (Chrome, Edge, Brave): her değişiklik seçtiğin `.json` dosyasına otomatik yazılır. Dosyayı Dropbox/Syncthing/Drive klasörüne koyarsan Windows ve Linux aynı listeyi kullanır. Açılışta içerik farklıysa en son değişen taraf kullanılır.
 - Firefox dosyaya doğrudan yazmayı desteklemez; orada İçe/Dışa aktar kullan.
 
 ## Oyun ilerlemesi
 
-Aralıklı tekrar (Leitner): doğru cevap kelimeyi bir üst seviyeye taşır ve 1, 3, 7, 21 gün sonrasına erteler; yanlış cevap seviye 1'e döndürür. Bu bilgi kelime dosyasını kirletmemek için **ayrı** tutulur (tarayıcıda). Başka bilgisayara geçerken **Veri → İlerlemeyi yedekle / Yedeği geri yükle** kullan.
+Aralıklı tekrar (Leitner): doğru cevap kelimeyi bir üst seviyeye taşır ve 1, 3, 7, 21 gün sonrasına erteler; yanlış cevap seviye 1'e döndürür. Bu bilgi kelime dosyasını kirletmemek için **ayrı** tutulur (tarayıcıda). Başka bilgisayara geçerken **Veri → Oyun ilerlemen → Yedekle / Geri yükle** kullan. Yedek, kaç gündür üst üste çalıştığını da taşır.
 
 ### Modlar
 

@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
   <meta name="referrer" content="no-referrer">
   <title>JSON Dictionary</title>
@@ -19,31 +19,61 @@
   <header class="topbar">
     <div class="brand"><span class="brand-accent">JSON</span> Dictionary</div>
     <nav class="tabs" role="tablist" aria-label="Bölümler">
-      <button class="tab is-active" role="tab" aria-selected="true" data-view="today">Bugün</button>
-      <button class="tab" role="tab" aria-selected="false" data-view="words">Kelimeler</button>
-      <button class="tab" role="tab" aria-selected="false" data-view="game">Oyun</button>
+      <button class="tab is-active" role="tab" aria-selected="true" data-view="today">
+        <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/></svg>
+        <span>Bugün</span>
+      </button>
+      <button class="tab" role="tab" aria-selected="false" data-view="words">
+        <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h9.5A3.5 3.5 0 0 1 18 8v11.5H8.5A3.5 3.5 0 0 1 5 16zM5 16a3.5 3.5 0 0 1 3.5-3.5H18"/></svg>
+        <span>Kelimeler</span>
+      </button>
+      <button class="tab" role="tab" aria-selected="false" data-view="game">
+        <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5v13l11-6.5z"/></svg>
+        <span>Oyun</span>
+      </button>
     </nav>
     <div class="topbar-actions">
+      <button id="add-btn" class="btn btn-primary btn-sm" title="Kelime ekle (N)"><span aria-hidden="true">+</span> Kelime</button>
       <button id="install-btn" class="btn btn-ghost btn-sm" hidden title="Uygulama olarak yükle">Yükle</button>
       <button id="reconnect-btn" class="btn btn-warn btn-sm" hidden>Dosyaya yeniden bağlan</button>
-      <button id="data-btn" class="btn btn-ghost btn-sm" title="İçe/dışa aktar, dosyaya bağla">Veri</button>
+      <button id="data-btn" class="btn btn-ghost btn-sm" title="Yedekle, geri yükle, ayarlar">Veri</button>
       <button id="theme-btn" class="btn btn-ghost btn-sm btn-icon" title="Temayı değiştir" aria-label="Temayı değiştir">◐</button>
     </div>
   </header>
 
-  <section class="stats" aria-label="Özet">
-    <div class="stat"><span class="stat-value" id="stat-total">0</span><span class="stat-label">kelime</span></div>
-    <div class="stat"><span class="stat-value" id="stat-due">0</span><span class="stat-label">tekrar zamanı gelen</span></div>
-    <div class="stat"><span class="stat-value" id="stat-mastered">0</span><span class="stat-label">öğrenilmiş</span></div>
-    <button class="stat stat-btn" id="stat-pending" title="Taslakları ve gözden geçirilecekleri göster">
-      <span class="stat-value" id="stat-drafts">0</span><span class="stat-label">taslak / gözden geçir</span>
-    </button>
-  </section>
-
   <main>
     <!-- BUGÜN -->
     <section id="view-today" class="view view-today">
-      <div class="panel today-main">
+      <div id="onboarding" class="panel onboarding" hidden>
+        <h2>Hoş geldin!</h2>
+        <p class="muted">Okurken karşına çıkan kelimeleri kaydet, kendi listenle oyun oynayarak öğren. Başlamak için:</p>
+        <ol class="ob-steps">
+          <li>
+            <strong>Kelime dosyan varsa içe aktar</strong>
+            <span class="muted small">Daha önce dışa aktardığın ya da eski biçimdeki JSON dosyası.</span>
+            <button type="button" class="btn btn-sm" id="ob-import">Dosya seç</button>
+          </li>
+          <li>
+            <strong>Ya da ilk kelimeni ekle</strong>
+            <span class="muted small">Kelimeyi ve gördüğün cümleyi yaz; anlamları sonra YZ'ye doldurtursun.</span>
+            <button type="button" class="btn btn-sm btn-primary" id="ob-add">Kelime ekle</button>
+          </li>
+          <li>
+            <strong>Okurken tek tıkla eklemek için yer imini kur</strong>
+            <span class="muted small">Sayfada kelimeyi seç, yer imine tıkla; kelime ve cümle hazır gelir.</span>
+            <button type="button" class="btn btn-sm" id="ob-bookmark">Nasıl?</button>
+          </li>
+        </ol>
+      </div>
+
+      <section class="stats" id="stats" aria-label="Özet">
+        <div class="stat"><span class="stat-value" id="stat-total">0</span><span class="stat-label">kelime</span></div>
+        <div class="stat"><span class="stat-value" id="stat-mastered">0</span><span class="stat-label">öğrenilmiş</span></div>
+        <div class="stat"><span class="stat-value" id="stat-today">0</span><span class="stat-label">bugün çalışılan</span></div>
+        <div class="stat"><span class="stat-value" id="stat-streak">0</span><span class="stat-label">gündür üst üste</span></div>
+      </section>
+
+      <div class="panel today-main" id="today-main">
         <p class="muted small" id="today-date"></p>
         <div class="today-big"><span id="today-due">0</span> <span id="today-due-label">kelimenin tekrar zamanı geldi</span></div>
         <p class="muted" id="today-studied"></p>
@@ -62,7 +92,7 @@
         <p class="muted small" id="today-start-info"></p>
       </div>
 
-      <div class="panel today-pending">
+      <div class="panel today-pending" id="today-pending">
         <h3>Bekleyenler</h3>
         <div class="today-row">
           <span><strong id="today-drafts">0</strong> taslak</span>
@@ -78,16 +108,16 @@
         </div>
         <div class="today-row">
           <span>Okurken kelime eklemek için</span>
-          <button class="btn btn-sm" id="today-quick">Hızlı ekle</button>
+          <button class="btn btn-sm" id="today-quick">Kelime ekle</button>
         </div>
       </div>
 
-      <div class="panel">
+      <div class="panel" id="today-weak-panel">
         <h3>En çok zorlandıkların</h3>
         <div id="today-weak" class="mini-list"></div>
       </div>
 
-      <div class="panel">
+      <div class="panel" id="today-recent-panel">
         <h3>Son eklenenler</h3>
         <div id="today-recent" class="mini-list"></div>
       </div>
@@ -95,110 +125,52 @@
 
     <!-- KELİMELER -->
     <section id="view-words" class="view view-words" hidden>
-      <aside class="side">
-        <div class="panel">
-          <h2>Hızlı ekle</h2>
-          <form id="quick-form" autocomplete="off" novalidate>
-            <label class="field">
-              <span>Kelime <em>*</em></span>
-              <input name="form" required placeholder="metinde gördüğün hâliyle: held" spellcheck="false" autocapitalize="off">
-            </label>
-            <p id="dup-hint" class="hint hint-info" hidden></p>
-
-            <label class="field">
-              <span>Gördüğün cümle</span>
-              <textarea name="sentence" rows="3" placeholder="The summit was held in Geneva."></textarea>
-              <small>Anlam bu cümleye göre seçilir. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> kaydeder.</small>
-            </label>
-
-            <label class="field">
-              <span>Kaynak</span>
-              <input name="source" placeholder="Makale, kitap, video…">
-              <small>Aynı metinden art arda eklerken kaynak korunur.</small>
-            </label>
-
-            <p id="quick-error" class="hint hint-error" hidden></p>
-
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary">Taslağa ekle</button>
-              <button type="button" id="manual-btn" class="btn btn-ghost">Elle tam giriş</button>
-            </div>
-          </form>
+      <div class="list-toolbar">
+        <input id="search" type="search" placeholder="Ara: kelime, anlam, cümle…  ( / )" aria-label="Ara">
+        <select id="pos-filter" aria-label="Türe göre süz">
+          <option value="">Tüm türler</option>
+          <option value="noun">İsim</option>
+          <option value="verb">Fiil</option>
+          <option value="adjective">Sıfat</option>
+          <option value="adverb">Zarf</option>
+          <option value="preposition">Edat</option>
+          <option value="conjunction">Bağlaç</option>
+          <option value="phrase">Kalıp</option>
+          <option value="unsorted">Türü belirsiz</option>
+        </select>
+        <select id="sort" aria-label="Sırala">
+          <option value="new">En yeni</option>
+          <option value="az">A → Z</option>
+          <option value="weak">En zayıf</option>
+        </select>
+        <button type="button" id="ai-btn" class="btn">YZ ile doldur <span class="count-badge" id="ai-count" hidden>0</span></button>
+      </div>
+      <div class="filter-chips" id="filter-chips" role="group" aria-label="Hızlı süzgeçler"></div>
+      <p class="list-meta muted small"><span id="list-count"></span> <button type="button" class="link" id="clear-filters" hidden>Süzgeçleri temizle</button></p>
+      <div id="word-grid" class="word-grid"></div>
+      <div id="empty-state" class="empty" hidden>
+        <p class="empty-title">Henüz kelime yok</p>
+        <p class="muted">İlk kelimeni ekle ya da daha önce kaydettiğin dosyayı içe aktar.</p>
+        <div class="btn-row center">
+          <button class="btn btn-primary" id="empty-add">Kelime ekle</button>
+          <button class="btn" id="empty-import">Dosya içe aktar</button>
         </div>
-
-        <div class="panel ai-panel">
-          <h2>YZ ile doldur</h2>
-          <p class="muted small" id="pending-text"></p>
-          <button id="ai-btn" class="btn btn-primary">YZ ile doldur</button>
-        </div>
-      </aside>
-
-      <section class="list-panel" aria-label="Kelime listesi">
-        <div class="list-toolbar">
-          <input id="search" type="search" placeholder="Ara: kelime, anlam, cümle…" aria-label="Ara">
-          <select id="sort" aria-label="Sırala">
-            <option value="new">En yeni</option>
-            <option value="az">A → Z</option>
-            <option value="weak">En zayıf</option>
-          </select>
-          <span id="list-count" class="muted"></span>
-        </div>
-        <div class="list-filters">
-          <select id="filter" aria-label="Duruma göre süz">
-            <option value="all">Tüm durumlar</option>
-            <option value="draft">Taslaklar</option>
-            <option value="review">Gözden geçir</option>
-            <option value="pending">Taslak + gözden geçir</option>
-            <option value="ready">Hazır</option>
-          </select>
-          <select id="pos-filter" aria-label="Türe göre süz">
-            <option value="">Tüm türler</option>
-            <option value="noun">İsim</option>
-            <option value="verb">Fiil</option>
-            <option value="adjective">Sıfat</option>
-            <option value="adverb">Zarf</option>
-            <option value="preposition">Edat</option>
-            <option value="conjunction">Bağlaç</option>
-            <option value="phrase">Kalıp</option>
-            <option value="unsorted">Türü belirsiz</option>
-          </select>
-          <select id="level-filter" aria-label="Seviyeye göre süz">
-            <option value="">Tüm seviyeler</option>
-            <option value="due">Tekrar zamanı gelmiş</option>
-            <option value="new">Hiç sorulmamış</option>
-            <option value="weak">Zayıf (seviye 1–2)</option>
-            <option value="mid">Orta (seviye 3–4)</option>
-            <option value="mastered">Öğrenilmiş</option>
-          </select>
-          <select id="date-filter" aria-label="Eklenme tarihine göre süz">
-            <option value="">Tüm zamanlar</option>
-            <option value="1">Bugün eklenen</option>
-            <option value="7">Son 7 gün</option>
-            <option value="30">Son 30 gün</option>
-          </select>
-          <button type="button" class="link small" id="clear-filters" hidden>Süzgeçleri temizle</button>
-        </div>
-        <div id="word-grid" class="word-grid"></div>
-        <div id="empty-state" class="empty" hidden>
-          <p class="empty-title">Henüz kelime yok</p>
-          <p class="muted">Soldan ilk kelimeni ekle ya da <button class="link" id="empty-import">JSON dosyanı içe aktar</button>.</p>
-        </div>
-      </section>
+      </div>
     </section>
 
     <!-- OYUN -->
     <section id="view-game" class="view view-game" hidden>
       <div id="game-setup" class="panel game-setup">
-        <h2>Oyun ayarları</h2>
-        <fieldset class="choice-group mode-group">
-          <legend>Mod</legend>
-          <label class="radio"><input type="radio" name="mode" value="en-tr" checked> <span><strong>EN → TR</strong> İngilizce kelime, Türkçe anlamı seç</span></label>
-          <label class="radio"><input type="radio" name="mode" value="tr-en"> <span><strong>TR → EN</strong> Türkçe anlam, İngilizce kelimeyi seç</span></label>
-          <label class="radio"><input type="radio" name="mode" value="tr-en-type"> <span><strong>TR → EN yazarak</strong> İngilizce kelimeyi kendin yaz</span></label>
-          <label class="radio"><input type="radio" name="mode" value="cloze"> <span><strong>Boşluk doldur</strong> Gördüğün cümlede eksik kelimeyi bul</span></label>
-          <label class="radio"><input type="radio" name="mode" value="card"> <span><strong>Kart</strong> Kartı çevir, bildin mi kendin söyle</span></label>
-          <label class="radio"><input type="radio" name="mode" value="confuse"> <span><strong>Ayırt et</strong> Aynı anlamı paylaşan kelimeleri ayır</span></label>
-          <label class="radio"><input type="radio" name="mode" value="root"> <span><strong>Kök ailesi</strong> Kökten türeyen kelimeyi bul</span></label>
+        <h2>Oyun</h2>
+        <fieldset class="mode-grid" id="mode-grid">
+          <legend class="sr-only">Mod</legend>
+          <label class="mode-card"><input type="radio" name="mode" value="en-tr" checked><strong>EN → TR</strong><span>Anlamını seç</span><em data-count="en-tr"></em></label>
+          <label class="mode-card"><input type="radio" name="mode" value="tr-en"><strong>TR → EN</strong><span>Kelimeyi seç</span><em data-count="tr-en"></em></label>
+          <label class="mode-card"><input type="radio" name="mode" value="tr-en-type"><strong>Yazarak</strong><span>Kelimeyi yaz</span><em data-count="tr-en-type"></em></label>
+          <label class="mode-card"><input type="radio" name="mode" value="cloze"><strong>Boşluk doldur</strong><span>Cümledeki eksik kelime</span><em data-count="cloze"></em></label>
+          <label class="mode-card"><input type="radio" name="mode" value="card"><strong>Kart</strong><span>Çevir, kendini puanla</span><em data-count="card"></em></label>
+          <label class="mode-card"><input type="radio" name="mode" value="confuse"><strong>Ayırt et</strong><span>Benzer anlamlıları ayır</span><em data-count="confuse"></em></label>
+          <label class="mode-card"><input type="radio" name="mode" value="root"><strong>Kök ailesi</strong><span>Kökten kelimeyi bul</span><em data-count="root"></em></label>
         </fieldset>
         <div class="setup-row">
           <label class="field">
@@ -217,7 +189,7 @@
             </select>
           </label>
         </div>
-        <p id="setup-info" class="muted"></p>
+        <p id="setup-info" class="muted small"></p>
         <button id="start-btn" class="btn btn-primary btn-lg">Oyuna başla</button>
       </div>
 
@@ -238,7 +210,7 @@
 
         <div id="choices" class="choices"></div>
 
-        <div id="card-bar" class="card-bar" hidden>
+        <div id="card-bar" class="card-bar sticky-action" hidden>
           <button type="button" id="flip-btn" class="btn btn-primary btn-lg">Kartı çevir</button>
         </div>
 
@@ -255,6 +227,54 @@
       <div id="game-summary" class="panel game-summary" hidden></div>
     </section>
   </main>
+
+  <!-- Kelime ekleme (hızlı) -->
+  <dialog id="quick-dlg" class="dialog dialog-wide" aria-labelledby="quick-title">
+    <form id="quick-form" autocomplete="off" novalidate>
+      <div class="dialog-head">
+        <h3 id="quick-title">Kelime ekle</h3>
+        <button type="button" class="btn btn-ghost btn-sm btn-icon" data-close aria-label="Kapat">✕</button>
+      </div>
+      <label class="field">
+        <span>Kelime <em>*</em></span>
+        <input name="form" required placeholder="metinde gördüğün hâliyle: held" spellcheck="false" autocapitalize="off">
+      </label>
+      <p id="dup-hint" class="hint hint-info" hidden></p>
+
+      <label class="field">
+        <span>Gördüğün cümle</span>
+        <textarea name="sentence" rows="3" placeholder="The summit was held in Geneva."></textarea>
+        <small>Anlam bu cümleye göre seçilir. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> kaydeder.</small>
+      </label>
+
+      <label class="field">
+        <span>Kaynak</span>
+        <input name="source" placeholder="Makale, kitap, video…">
+        <small>Aynı metinden art arda eklerken kaynak korunur.</small>
+      </label>
+
+      <p id="quick-ok" class="hint hint-ok" hidden></p>
+      <p id="quick-error" class="hint hint-error" hidden></p>
+
+      <div class="dialog-actions spread">
+        <button type="button" id="manual-btn" class="btn btn-ghost">Elle tam giriş</button>
+        <button type="submit" class="btn btn-primary">Taslağa ekle</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Kelime ayrıntısı -->
+  <dialog id="word-dlg" class="dialog dialog-xl" aria-labelledby="word-title">
+    <div class="dialog-head">
+      <h3 id="word-title" class="word-title"></h3>
+      <button type="button" class="btn btn-ghost btn-sm btn-icon" data-close aria-label="Kapat">✕</button>
+    </div>
+    <div id="word-body" class="word-body"></div>
+    <div class="dialog-actions spread">
+      <button type="button" class="btn btn-ghost btn-danger" id="word-delete">Sil</button>
+      <button type="button" class="btn btn-primary" id="word-edit">Düzenle</button>
+    </div>
+  </dialog>
 
   <!-- Kelime düzenleme penceresi -->
   <dialog id="edit-dlg" class="dialog dialog-xl" aria-labelledby="edit-title">
@@ -325,20 +345,20 @@
     <option value="Latince"><option value="Yunanca"><option value="Eski İngilizce"><option value="Eski Fransızca"><option value="Fransızca">
   </datalist>
 
-  <!-- YZ ile doldurma penceresi -->
+  <!-- YZ ile doldurma: 3 adım -->
   <dialog id="ai-dlg" class="dialog dialog-xl" aria-labelledby="ai-title">
     <div class="dialog-head">
       <h3 id="ai-title">YZ ile doldur</h3>
-      <button type="button" class="btn btn-ghost btn-sm btn-icon" id="ai-close" aria-label="Kapat">✕</button>
+      <button type="button" class="btn btn-ghost btn-sm btn-icon" data-close aria-label="Kapat">✕</button>
     </div>
+    <ol class="wizard-steps" id="ai-steps">
+      <li data-step="1"><span>1</span> Seç</li>
+      <li data-step="2"><span>2</span> Yapıştır</li>
+      <li data-step="3"><span>3</span> Kontrol et</li>
+    </ol>
 
-    <div id="ai-step1">
-      <ol class="steps muted small">
-        <li>Doldurulacak kelimeleri seç.</li>
-        <li><strong>İsteği kopyala</strong> ve kullandığın YZ'ye (ChatGPT, Claude, Gemini…) yapıştır.</li>
-        <li>YZ'nin cevabını aşağıya yapıştırıp <strong>Kontrol et</strong>.</li>
-      </ol>
-
+    <div id="ai-step1" class="ai-step">
+      <p class="muted small">Anlamlarını YZ'ye doldurtmak istediğin kelimeleri seç. Taslaklar hazır seçili gelir.</p>
       <div class="ai-pick-bar">
         <input id="ai-filter" type="search" placeholder="Kelime ara…" aria-label="Kelime ara">
         <span class="muted small">Seç:
@@ -348,31 +368,41 @@
         </span>
       </div>
       <div id="ai-pick" class="ai-pick"></div>
-
-      <div class="ai-copy-row">
-        <button type="button" id="ai-copy" class="btn btn-primary">İsteği kopyala</button>
-        <span id="ai-sel-count" class="muted small"></span>
-      </div>
       <details class="sub-details" id="ai-prompt-details">
         <summary>İstek metnini göster</summary>
         <textarea id="ai-prompt" class="mono" rows="10" readonly></textarea>
       </details>
-
-      <label class="field">
-        <span>YZ'nin cevabı</span>
-        <textarea id="ai-answer" class="mono" rows="7" spellcheck="false" placeholder='{ "hold": { "form": "held", "senses": { … }, "primary": "…" } }'></textarea>
-      </label>
-      <p id="ai-error" class="hint hint-error" hidden></p>
-      <div class="dialog-actions">
-        <button type="button" id="ai-check" class="btn btn-primary">Kontrol et</button>
+      <div class="dialog-actions spread">
+        <span id="ai-sel-count" class="muted small"></span>
+        <button type="button" id="ai-copy" class="btn btn-primary">İsteği kopyala ve devam et →</button>
       </div>
     </div>
 
-    <div id="ai-step2" hidden>
+    <div id="ai-step2" class="ai-step" hidden>
+      <div class="callout">
+        <strong>İstek panoya kopyalandı.</strong>
+        <span>ChatGPT, Claude ya da Gemini'ye yapıştır. Gelen cevabın tamamını kopyalayıp buraya yapıştır.</span>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn" id="ai-paste">Panodan yapıştır</button>
+        <button type="button" class="btn btn-ghost" id="ai-recopy">İsteği tekrar kopyala</button>
+      </div>
+      <label class="field">
+        <span>YZ'nin cevabı</span>
+        <textarea id="ai-answer" class="mono" rows="9" spellcheck="false" placeholder='{ "hold": { "form": "held", "senses": { … }, "primary": "…" } }'></textarea>
+      </label>
+      <p id="ai-error" class="hint hint-error" hidden></p>
+      <div class="dialog-actions spread">
+        <button type="button" class="btn btn-ghost" data-ai-back="1">← Geri</button>
+        <button type="button" id="ai-check" class="btn btn-primary">Kontrol et →</button>
+      </div>
+    </div>
+
+    <div id="ai-step3" class="ai-step" hidden>
       <p id="ai-summary" class="muted small"></p>
       <div id="ai-preview" class="ai-preview"></div>
-      <div class="dialog-actions">
-        <button type="button" id="ai-back" class="btn btn-ghost">Geri</button>
+      <div class="dialog-actions spread">
+        <button type="button" class="btn btn-ghost" data-ai-back="2">← Geri</button>
         <button type="button" id="ai-apply" class="btn btn-primary">Seçilenleri kaydet</button>
       </div>
     </div>
@@ -388,49 +418,66 @@
   </dialog>
 
   <!-- Veri penceresi -->
-  <dialog id="data-dlg" class="dialog dialog-wide">
-    <form method="dialog">
-      <h3>Veri</h3>
-      <p class="muted" id="data-status"></p>
+  <dialog id="data-dlg" class="dialog dialog-wide" aria-labelledby="data-title">
+    <div class="dialog-head">
+      <h3 id="data-title">Veri</h3>
+      <button type="button" class="btn btn-ghost btn-sm btn-icon" data-close aria-label="Kapat">✕</button>
+    </div>
+    <p class="muted small" id="data-status"></p>
 
-      <h4>Kelime dosyası</h4>
+    <section class="data-section">
+      <div>
+        <h4>Kelimelerin</h4>
+        <p class="muted small">Yedek almak ya da başka bir cihaza taşımak için.</p>
+      </div>
       <div class="btn-row">
-        <button type="button" class="btn" id="import-btn">İçe aktar</button>
         <button type="button" class="btn" id="export-btn">Dışa aktar</button>
+        <button type="button" class="btn" id="import-btn">İçe aktar</button>
       </div>
-      <p class="muted small">Biçim: <code>{ "kelime": { "senses", "primary", "seen", "base", "etymology", "note" } }</code>. Eski biçimdeki dosyalar (<code>type</code>, <code>meaning</code>, <code>root</code>…) okunur ve otomatik dönüştürülür; emin olunamayan kelimeler "gözden geçir" olarak işaretlenir.</p>
+    </section>
 
-      <h4>Oyun ilerlemesi</h4>
+    <section class="data-section">
+      <div>
+        <h4>Oyun ilerlemen</h4>
+        <p class="muted small">Hangi kelimeyi ne kadar bildiğin ayrı tutulur; cihaz değiştirirken bunu da taşı.</p>
+      </div>
       <div class="btn-row">
-        <button type="button" class="btn" id="progress-export-btn">İlerlemeyi yedekle</button>
-        <button type="button" class="btn" id="progress-import-btn">Yedeği geri yükle</button>
+        <button type="button" class="btn" id="progress-export-btn">Yedekle</button>
+        <button type="button" class="btn" id="progress-import-btn">Geri yükle</button>
       </div>
-      <p class="muted small">Hangi kelimeyi ne kadar bildiğin kelime dosyasına yazılmaz, bu tarayıcıda tutulur. Başka bilgisayara geçerken bu yedeği de taşı.</p>
+    </section>
 
+    <section class="data-section stack" id="bookmark-section">
+      <div>
+        <h4>Okurken tek tıkla ekleme</h4>
+        <p class="muted small">Bu düğmeyi tarayıcının yer imleri çubuğuna sürükle. Sayfada bir kelimeyi seçip yer imine tıklayınca kelime ve içinde geçtiği cümle hazır gelir.</p>
+      </div>
+      <a id="bookmarklet" class="btn bookmarklet" href="#" title="Yer imleri çubuğuna sürükle">+ Sözlüğe ekle</a>
+      <p class="muted small" id="bookmarklet-note"></p>
+    </section>
+
+    <details class="sub-details advanced">
+      <summary>Gelişmiş</summary>
       <div id="fs-section">
         <h4>Dosyaya bağla</h4>
-        <p class="muted small">Bağlı bir dosyaya her değişiklik otomatik yazılır. Dosyayı Dropbox, Syncthing veya Google Drive klasörüne koyarsan Windows ve Linux'ta aynı listeyi kullanırsın.</p>
+        <p class="muted small">Bağlı bir dosyaya her değişiklik otomatik yazılır. Dosyayı Dropbox, Syncthing veya Google Drive klasörüne koyarsan bilgisayarların aynı listeyi kullanır.</p>
         <div class="btn-row">
-          <button type="button" class="btn" id="bind-open-btn">Mevcut dosyayı aç</button>
-          <button type="button" class="btn" id="bind-new-btn">Yeni dosya oluştur</button>
-          <button type="button" class="btn btn-ghost" id="unbind-btn" hidden>Bağlantıyı kes</button>
+          <button type="button" class="btn btn-sm" id="bind-open-btn">Mevcut dosyayı aç</button>
+          <button type="button" class="btn btn-sm" id="bind-new-btn">Yeni dosya oluştur</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="unbind-btn" hidden>Bağlantıyı kes</button>
         </div>
       </div>
-      <h4>Sayfadan ekleme (yer imi)</h4>
-      <p class="muted small">Aşağıdaki düğmeyi tarayıcının yer imleri çubuğuna sürükle. Okurken bir kelimeyi seçip yer imine tıkladığında uygulama, kelime ve içinde geçtiği cümle dolu olarak açılır; <kbd>Enter</kbd> ile taslağa eklersin.</p>
-      <p><a id="bookmarklet" class="btn bookmarklet" href="#" title="Yer imleri çubuğuna sürükle">+ Sözlüğe ekle</a></p>
-      <p class="muted small" id="bookmarklet-note"></p>
-
-      <p id="fs-unsupported" class="muted small" hidden>Bu tarayıcı dosyaya doğrudan yazmayı desteklemiyor (Firefox gibi). Veriler tarayıcıda kalır; yedek almak ya da başka bilgisayara taşımak için Dışa aktar / İçe aktar kullan. Otomatik dosya kaydı için Chrome, Edge veya Brave kullanabilirsin.</p>
-
-      <div class="dialog-actions">
-        <button class="btn btn-primary" value="close">Kapat</button>
-      </div>
-    </form>
+      <p id="fs-unsupported" class="muted small" hidden>Bu tarayıcı dosyaya doğrudan yazmayı desteklemiyor (Firefox gibi). Otomatik dosya kaydı için Chrome, Edge veya Brave kullanabilirsin.</p>
+      <h4>Dosya biçimi</h4>
+      <p class="muted small"><code>{ "kelime": { "senses", "primary", "seen", "base", "etymology", "note" } }</code>. Eski biçimdeki dosyalar (<code>type</code>, <code>meaning</code>, <code>root</code>…) okunur ve otomatik dönüştürülür.</p>
+    </details>
   </dialog>
 
   <input type="file" id="file-input" accept=".json,application/json" hidden>
-  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" popover="manual">
+    <span id="toast-msg"></span>
+    <button type="button" id="toast-action" class="toast-action" hidden></button>
+  </div>
 
   <script src="js/store.js"></script>
   <script src="js/quiz.js"></script>

@@ -34,7 +34,8 @@ const Store = (() => {
   const DAY = 24 * 60 * 60 * 1000;
   const PROGRESS_FIELDS = ['box', 'due', 'correct', 'wrong', 'lastSeen'];
 
-  let state = { savedAt: 0, words: [] };
+  // days: çalışılan günler (YYYY-AA-GG), seri hesabı için
+  let state = { savedAt: 0, words: [], days: [] };
   let migratedOnLoad = null; // { count, flagged } eski yerel veri dönüştürüldüyse
   const listeners = new Set();
 
@@ -355,7 +356,11 @@ const Store = (() => {
       const raw = localStorage.getItem(LS_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        state = { savedAt: num(parsed.savedAt), words: (parsed.words || []).map((w) => makeWord(w)) };
+        state = {
+          savedAt: num(parsed.savedAt),
+          words: (parsed.words || []).map((w) => makeWord(w)),
+          days: Array.isArray(parsed.days) ? parsed.days.filter((d) => typeof d === 'string') : [],
+        };
         return;
       }
       // Önceki sürümün yerel verisi: dönüştür, ilerlemeyi koru. Eski anahtar yedek olarak kalır.
@@ -363,7 +368,7 @@ const Store = (() => {
       if (legacy) {
         const parsed = JSON.parse(legacy);
         const words = (parsed.words || []).map((w) => makeWord({ ...w, ...fromLegacy(w.word, w) }));
-        state = { savedAt: num(parsed.savedAt), words };
+        state = { savedAt: num(parsed.savedAt), words, days: [] };
         migratedOnLoad = { count: words.length, flagged: words.filter((w) => w.review.length).length };
         saveLocal();
       }
@@ -563,8 +568,18 @@ const Store = (() => {
     return n;
   }
 
+  // Silinen kaydı ve yerini döndürür; restore() ile geri alınabilir.
   function remove(id) {
-    state.words = state.words.filter((w) => w.id !== id);
+    const index = state.words.findIndex((w) => w.id === id);
+    if (index < 0) return null;
+    const [word] = state.words.splice(index, 1);
+    persist();
+    return { word, index };
+  }
+
+  function restore(removed) {
+    if (!removed || get(removed.word.id) || findByWord(removed.word.word)) return;
+    state.words.splice(Math.min(removed.index, state.words.length), 0, removed.word);
     persist();
   }
 
@@ -583,7 +598,29 @@ const Store = (() => {
       w.box = 1;
       w.due = now;
     }
+    markStudied(now);
     persist({ contentChanged: false });
+  }
+
+  const dayKey = (t) => {
+    const d = new Date(t);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+  function markStudied(now = Date.now()) {
+    const k = dayKey(now);
+    if (!state.days.includes(k)) state.days = [...state.days, k].slice(-400);
+  }
+  // Üst üste çalışılan gün sayısı. Bugün henüz çalışılmadıysa dünden geriye sayılır.
+  function streak(now = Date.now()) {
+    const set = new Set(state.days);
+    let t = now;
+    if (!set.has(dayKey(t))) t -= DAY;
+    let n = 0;
+    while (set.has(dayKey(t))) {
+      n++;
+      t -= DAY;
+    }
+    return n;
   }
 
   function stats(now = Date.now()) {
@@ -595,6 +632,8 @@ const Store = (() => {
       mastered: ready.filter((w) => w.box >= MAX_BOX).length,
       drafts: words.length - ready.length,
       review: words.filter((w) => w.review.length).length,
+      studiedToday: words.filter((w) => w.lastSeen && dayKey(w.lastSeen) === dayKey(now)).length,
+      streak: streak(now),
     };
   }
 
@@ -791,7 +830,7 @@ const Store = (() => {
     for (const w of state.words) {
       progress[w.word] = Object.fromEntries(PROGRESS_FIELDS.map((k) => [k, w[k]]));
     }
-    return JSON.stringify({ kind: 'jsondictionary-progress', savedAt: Date.now(), progress }, null, 2) + '\n';
+    return JSON.stringify({ kind: 'jsondictionary-progress', savedAt: Date.now(), days: state.days, progress }, null, 2) + '\n';
   }
 
   function importProgress(text) {
@@ -815,6 +854,10 @@ const Store = (() => {
       w.wrong = num(p.wrong);
       w.lastSeen = p.lastSeen ? num(p.lastSeen) : null;
       n++;
+    }
+    if (Array.isArray(data.days)) {
+      const days = data.days.filter((d) => typeof d === 'string' && /^\d{4}-\d\d-\d\d$/.test(d));
+      state.days = [...new Set([...state.days, ...days])].sort().slice(-400);
     }
     persist({ contentChanged: false });
     return n;
@@ -988,6 +1031,7 @@ const Store = (() => {
     dismissReview,
     applyAI,
     remove,
+    restore,
     recordAnswer,
     stats,
     parse,
